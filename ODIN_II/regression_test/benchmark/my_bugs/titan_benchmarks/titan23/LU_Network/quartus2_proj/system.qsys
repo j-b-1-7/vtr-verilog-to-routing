@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system name="$${FILENAME}">
+ <component
+   name="$${FILENAME}"
+   displayName="$${FILENAME}"
+   version="1.0"
+   description=""
+   tags=""
+   categories="System" />
+ <parameter name="bonusData"><![CDATA[bonusData 
+{
+   element $${FILENAME}
+   {
+   }
+   element ddr_clk
+   {
+      datum _sortIndex
+      {
+         value = "0";
+         type = "int";
+      }
+   }
+   element export
+   {
+      datum _sortIndex
+      {
+         value = "4";
+         type = "int";
+      }
+   }
+   element lu
+   {
+      datum _sortIndex
+      {
+         value = "3";
+         type = "int";
+      }
+   }
+   element ports2avalon
+   {
+      datum _sortIndex
+      {
+         value = "2";
+         type = "int";
+      }
+   }
+   element reset
+   {
+      datum _sortIndex
+      {
+         value = "1";
+         type = "int";
+      }
+   }
+   element lu.s
+   {
+      datum _lockedAddress
+      {
+         value = "1";
+         type = "boolean";
+      }
+      datum baseAddress
+      {
+         value = "1073741824";
+         type = "long";
+      }
+   }
+   element export.s
+   {
+      datum _lockedAddress
+      {
+         value = "1";
+         type = "boolean";
+      }
+   }
+}
+]]></parameter>
+ <parameter name="clockCrossingAdapter" value="AUTO" />
+ <parameter name="device" value="" />
+ <parameter name="deviceFamily" value="STRATIXIV" />
+ <parameter name="deviceSpeedGrade" value="" />
+ <parameter name="fabricMode" value="QSYS" />
+ <parameter name="generateLegacySim" value="false" />
+ <parameter name="generationId" value="0" />
+ <parameter name="globalResetBus" value="false" />
+ <parameter name="hdlLanguage" value="VERILOG" />
+ <parameter name="maxAdditionalLatency" value="4" />
+ <parameter name="projectName" value="DE4.qpf" />
+ <parameter name="sopcBorderPoints" value="false" />
+ <parameter name="systemHash" value="1" />
+ <parameter name="timeStamp" value="1335378690694" />
+ <parameter name="useTestBenchNamingPattern" value="false" />
+ <instanceScript></instanceScript>
+ <interface name="ddr" internal="export.m_export" type="conduit" dir="end" />
+ <interface name="compclks" internal="lu.coreclk" />
+ <interface name="usb" internal="ports2avalon.usb" type="conduit" dir="end" />
+ <interface name="ddr_clk" internal="ddr_clk.in_clk" type="clock" dir="end" />
+ <interface name="reset" internal="reset.in_reset" type="reset" dir="end" />
+ <interface name="comp_clk" internal="lu.comp_clk" type="clock" dir="end" />
+ <module kind="ports2avalon" version="1.0" enabled="1" name="ports2avalon">
+  <parameter name="ADDRESS_WIDTH" value="32" />
+  <parameter name="AUTO_CLOCK_CLOCK_RATE" value="200000000" />
+ </module>
+ <module kind="lu_qsys_wrapper" version="2.0" enabled="1" name="lu">
+  <parameter name="BURSTLEN" value="6" />
+  <parameter name="ADDRESS_WIDTH" value="30" />
+  <parameter name="AUTO_DDR_CLK_CLOCK_RATE" value="200000000" />
+  <parameter name="AUTO_COMP_CLK_CLOCK_RATE" value="0" />
+ </module>
+ <module kind="export_master" version="1.0" enabled="1" name="export">
+  <parameter name="DWIDTH" value="256" />
+  <parameter name="AWIDTH_S" value="25" />
+  <parameter name="AWIDTH_M" value="30" />
+  <parameter name="BYTEWIDTH" value="32" />
+  <parameter name="BURSTWIDTH" value="6" />
+  <parameter name="AUTO_CLOCK_CLOCK_RATE" value="200000000" />
+ </module>
+ <module kind="altera_clock_bridge" version="11.1" enabled="1" name="ddr_clk">
+  <parameter name="DERIVED_CLOCK_RATE" value="0" />
+  <parameter name="EXPLICIT_CLOCK_RATE" value="200000000" />
+  <parameter name="NUM_CLOCK_OUTPUTS" value="1" />
+ </module>
+ <module kind="altera_reset_bridge" version="11.1" enabled="1" name="reset">
+  <parameter name="ACTIVE_LOW_RESET" value="0" />
+  <parameter name="SYNCHRONOUS_EDGES" value="deassert" />
+  <parameter name="NUM_RESET_OUTPUTS" value="1" />
+  <parameter name="AUTO_CLK_CLOCK_RATE" value="200000000" />
+ </module>
+ <connection kind="avalon" version="11.1" start="lu.ddr" end="export.s">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0000" />
+ </connection>
+ <connection kind="avalon" version="11.1" start="ports2avalon.master" end="lu.s">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x40000000" />
+ </connection>
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon.master"
+   end="export.s">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0000" />
+ </connection>
+ <connection kind="clock" version="11.1" start="ddr_clk.out_clk" end="reset.clk" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="ddr_clk.out_clk"
+   end="ports2avalon.clock" />
+ <connection kind="clock" version="11.1" start="ddr_clk.out_clk" end="lu.ddr_clk" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="ddr_clk.out_clk"
+   end="export.clock" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="reset.out_reset"
+   end="ports2avalon.reset" />
+ <connection kind="reset" version="11.1" start="reset.out_reset" end="lu.reset" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="reset.out_reset"
+   end="export.reset" />
+</system>

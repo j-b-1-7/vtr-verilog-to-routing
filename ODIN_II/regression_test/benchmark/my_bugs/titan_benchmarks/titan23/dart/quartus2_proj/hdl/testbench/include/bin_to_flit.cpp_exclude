@@ -1,0 +1,65 @@
+/* bin_to_flit.cpp
+ *
+ * Convert binary flit to flit fields
+ */
+
+#include <iostream>
+#include <string>
+#include <bitset>
+#include <stdio.h>
+#include <stdlib.h>
+#include "const.h"
+using namespace std;
+
+
+struct Flit
+{
+	unsigned int addr3;						// Final destination of flit (Layer 3)
+	unsigned int size;
+	unsigned int timestamp;
+	unsigned int data;
+	unsigned int source;					// Originator node of the flit
+	unsigned int injection_ts;				// Injection timestamp
+	bool measure;							// Indicate if this is a measurement flit
+	unsigned int process_clk;				// When this flit should be processed. Models the RAM FIFO latency
+	bool is_head;
+	bool is_tail;
+};
+
+
+int main (int argc, char *argv[])
+{
+    unsigned int flit_hi, flit_lo;
+
+    if (argc != 3)
+    {
+        cerr << "Expect 2 binary string arguments, flit_hi and flit_lo" << endl;
+        exit (1);
+    }
+    
+    flit_hi = (unsigned int)(strtoul (argv[1], NULL, 16));
+    flit_lo = (unsigned int)(strtoul (argv[2], NULL, 16));
+
+    printf ("Flit: 0x%08x%08x\n", flit_hi, flit_lo);
+
+    // Parse out flit fields
+    Flit f;
+
+    f.is_head = ((flit_hi >> 3) == 1);
+    f.is_tail = (((flit_hi >> 2) & 0x1) == 1);
+    f.measure = (((flit_hi >> 1) & 0x1) == 1);
+
+    f.timestamp = ((flit_hi & 0x1)<<9) | ((flit_lo & 0xFF800000) >> 23);
+    f.addr3 = (flit_lo & 0x007F8000) >> 15;
+    
+    if (f.is_head)
+        f.source = (flit_lo & 0x00007FE0) >> 5;
+    else
+        f.injection_ts = (flit_lo & 0x00007FE0) >> 5;
+
+    printf ("%c measure %d dest %d timestamp %d %s %d\n", (f.is_head ? 'H' : (f.is_tail ? 'T' : 'B')),
+        f.measure ? 1 : 0, f.addr3, f.timestamp, (f.is_head ? "source" : "injection"),
+        (f.is_head ? f.source : f.injection_ts));
+    return 0;
+}
+

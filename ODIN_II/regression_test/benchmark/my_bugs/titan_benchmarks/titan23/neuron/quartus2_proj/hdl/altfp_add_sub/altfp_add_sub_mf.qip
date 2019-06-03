@@ -1,0 +1,8 @@
+set_global_assignment -name IP_TOOL_NAME "ALTFP_ADD_SUB"
+set_global_assignment -name IP_TOOL_VERSION "11.1"
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf.v"]
+set_global_assignment -name MISC_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf.bsf"]
+set_global_assignment -name MISC_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf_inst.v"]
+set_global_assignment -name MISC_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf_bb.v"]
+set_global_assignment -name MISC_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf.inc"]
+set_global_assignment -name MISC_FILE [file join $::quartus(qip_path) "altfp_add_sub_mf.cmp"]

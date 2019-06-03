@@ -1,0 +1,2 @@
+verilog work "../rr_prio_x4.v"
+verilog work "../TracePBControl.v"

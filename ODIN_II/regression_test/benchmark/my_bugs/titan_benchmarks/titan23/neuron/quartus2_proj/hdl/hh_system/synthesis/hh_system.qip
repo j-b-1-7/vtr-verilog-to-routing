@@ -1,0 +1,77 @@
+set_global_assignment -entity "hh_system" -library "lib_hh_system" -name IP_TOOL_NAME "qsys"
+set_global_assignment -entity "hh_system" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -library "lib_hh_system" -name MISC_FILE [file join $::quartus(qip_path) ../../hh_system.sopcinfo]
+set_instance_assignment -entity "hh_system" -library "lib_hh_system" -name SLD_INFO "QSYS_NAME hh_system HAS_SOPCINFO 1 GENERATION_ID 1341956766"
+set_global_assignment -name SYNTHESIS_ONLY_QIP ON
+set_global_assignment -library "lib_hh_system" -name MISC_FILE [file join $::quartus(qip_path) ../../hh_system.qsys]
+
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) hh_system.v]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_arbitrator.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_rsp_xbar_mux.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_rsp_xbar_demux.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_cmd_xbar_demux.sv]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/altera_reset_controller.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/altera_reset_synchronizer.v]
+set_global_assignment -library "lib_hh_system" -name SDC_FILE [file join $::quartus(qip_path) submodules/altera_reset_controller.sdc]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_id_router.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_addr_router.sv]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/altera_avalon_sc_fifo.v]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_slave_agent.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_burst_uncompressor.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_master_agent.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_slave_translator.sv]
+set_global_assignment -library "lib_hh_system" -name SYSTEMVERILOG_FILE [file join $::quartus(qip_path) submodules/altera_merlin_master_translator.sv]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_timing_adapter_1.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_timing_adapter_1_fifo.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_timing_adapter.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_output_data.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_system_input_data.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/ports2avalon.v]
+set_global_assignment -library "lib_hh_system" -name VERILOG_FILE [file join $::quartus(qip_path) submodules/hh_core.v]
+
+set_global_assignment -entity "hh_system_rsp_xbar_mux" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_multiplexer"
+set_global_assignment -entity "hh_system_rsp_xbar_mux" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_rsp_xbar_mux" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_rsp_xbar_demux" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_demultiplexer"
+set_global_assignment -entity "hh_system_rsp_xbar_demux" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_rsp_xbar_demux" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_cmd_xbar_demux" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_demultiplexer"
+set_global_assignment -entity "hh_system_cmd_xbar_demux" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_cmd_xbar_demux" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_reset_controller" -library "lib_hh_system" -name IP_TOOL_NAME "altera_reset_controller"
+set_global_assignment -entity "altera_reset_controller" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_reset_controller" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_id_router" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_router"
+set_global_assignment -entity "hh_system_id_router" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_id_router" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_addr_router" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_router"
+set_global_assignment -entity "hh_system_addr_router" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_addr_router" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_avalon_sc_fifo" -library "lib_hh_system" -name IP_TOOL_NAME "altera_avalon_sc_fifo"
+set_global_assignment -entity "altera_avalon_sc_fifo" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_avalon_sc_fifo" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_merlin_slave_agent" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_slave_agent"
+set_global_assignment -entity "altera_merlin_slave_agent" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_merlin_slave_agent" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_merlin_master_agent" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_master_agent"
+set_global_assignment -entity "altera_merlin_master_agent" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_merlin_master_agent" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_merlin_slave_translator" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_slave_translator"
+set_global_assignment -entity "altera_merlin_slave_translator" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_merlin_slave_translator" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "altera_merlin_master_translator" -library "lib_hh_system" -name IP_TOOL_NAME "altera_merlin_master_translator"
+set_global_assignment -entity "altera_merlin_master_translator" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "altera_merlin_master_translator" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_timing_adapter_1" -library "lib_hh_system" -name IP_TOOL_NAME "timing_adapter"
+set_global_assignment -entity "hh_system_timing_adapter_1" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_timing_adapter_1" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_timing_adapter" -library "lib_hh_system" -name IP_TOOL_NAME "timing_adapter"
+set_global_assignment -entity "hh_system_timing_adapter" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_timing_adapter" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_output_data" -library "lib_hh_system" -name IP_TOOL_NAME "altera_avalon_fifo"
+set_global_assignment -entity "hh_system_output_data" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_output_data" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"
+set_global_assignment -entity "hh_system_input_data" -library "lib_hh_system" -name IP_TOOL_NAME "altera_avalon_fifo"
+set_global_assignment -entity "hh_system_input_data" -library "lib_hh_system" -name IP_TOOL_VERSION "12.0"
+set_global_assignment -entity "hh_system_input_data" -library "lib_hh_system" -name IP_TOOL_ENV "qsys"

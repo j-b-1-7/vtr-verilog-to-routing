@@ -1,0 +1,494 @@
+/* Standalone test for FlitQueue
+ *
+ * fq_test.c
+ */
+#include <stdio.h>
+#include <string.h>
+#include <limits.h>
+#include "const.h"
+
+#include <map>
+#include "sim.h"
+#include "util.h"
+#include "node.h"
+#include "flitqueue.h"
+#include "trafficgen.h"
+
+#include "arch.h"
+
+
+#if C_TEST
+#define V_DISP(x) printf("%s\n", x)
+#define sv_0 0
+#define sv_1 1
+#else
+#include "svdpi.h"
+#include "dpiheader.h"
+#define V_DISP(x) v_disp(x)
+#endif
+
+#define myprintf(fmt,...) printf("%5u  ", CLK); printf(fmt,##__VA_ARGS__)
+#define VVDISP(fmt,...) sprintf(buf, fmt,##__VA_ARGS__); V_DISP(buf)
+
+/* Global variables for the sim CPP files */
+
+unsigned int T, DT;					    // Simulation time
+unsigned int CLK;					    // Simulation clock cycles
+map<unsigned int, Node*> addr_to_node;
+e_sim_state sim_state;				    // Simulation state
+unsigned int flit_id;				    // Next flit ID (unique)
+int num_warnings;					    // Total number of warnings
+SimTime sim_time;
+
+
+#define SIM_CLKS 1000
+char buf[300];
+
+/********** Test States **********************************************/
+
+#define LOG_NVCS 1
+#define NVCS (1<<LOG_NVCS)
+
+typedef enum {
+    UNINIT = 0,
+    RESET,
+    CONFIG,
+    WAIT,
+    TEST,
+    DONE,
+    NUM_TEST_STATS
+} e_test_state;
+
+TrafficGen *tg[2] = {NULL, NULL};      // [0] is uut, [1] is tester
+
+FILE *config_fp = NULL;
+int config_length = 1;
+int config_sent = 0;
+
+int test_init_wait = 0;
+e_test_state state = UNINIT;
+
+// Reference data
+bool sw_flit_ack = false;
+bool sw_ready[NVCS];
+unsigned int sw_flit[NVCS][2];
+
+unsigned char tg_dequeue = 0;
+
+/********** Helper Functions *********************************************/
+
+#if C_TEST
+void put_logic (int *d, int len, int offset, unsigned int s) {}
+#else
+void put_logic (svLogicVecVal *d, int len, int offset, unsigned int s)
+{
+    for (int i = 0; i < len; i++)
+    {
+        svPutBitselLogic(d, i+offset, (s&(1<<i)) ? sv_1 : sv_0);
+    }
+}
+
+void get_logic (const svLogicVecVal *s, int len, int offset, unsigned int *d)
+{
+    unsigned int temp = 0;
+    for (int i = offset + len - 1; i >= offset; i--)
+    {
+        temp = (temp << 1) | (svGetBitselLogic(s, i) == sv_1 ? 1 : 0);
+    }
+    *d = temp;
+}
+#endif
+
+void form_flit (const Flit *f, unsigned *flit_hi, unsigned *flit_lo)
+{
+    unsigned src_inj_ts = f->is_head ? f->source : f->injection_ts;
+    *flit_lo = ((f->timestamp & 0x000001FF)<<23) | ((f->addr3 & 0x000000FF)<<15) | ((src_inj_ts & 0x000003FF)<<5) | ((f->data & 0x0000001F));
+    *flit_hi = ((f->is_head ? 1 : 0)<<3) | ((f->is_tail ? 1 : 0)<<2) | ((f->measure ? 1 : 0)<<1) | ((f->timestamp & 0x000003FF)>>9);
+}
+
+
+/********** Test Functions ***********************************************/
+
+int c_init ()
+{
+    T = 0;
+    CLK = 0;
+
+#if C_TEST    
+    // Print verbose simulator messages
+    sim_verbose = true;
+#else
+    sim_verbose = false;
+#endif
+	FlitQueue::nVCs = 2;
+
+    tg[0] = new TrafficGen (45, 2);    // (addr2, def_router)
+    tg[1] = new TrafficGen (2, 45);
+    
+    double interval[2] = {20, 20};
+    ArchTrafficGen atg[2];
+   
+    // TG to provide some traffic for the FlitQueue under test
+    atg[0].addr2 = tg[0]->addr2;
+    atg[0].size = 9;                // config psize = actual psize - 1
+    atg[0].threshold = (unsigned)((0xFFFFFFFF/interval[0]) + 0.5);
+    VVDISP ("TG (%d) threshold 0x%08x %d", atg[0].addr2, atg[0].threshold, atg[0].threshold);
+    atg[0].sendto = tg[1]->addr2;
+    atg[0].def_router = tg[1]->addr2;
+    atg[0].rng.s[0] = 1;
+    atg[0].rng.s[1] = 2;
+    atg[0].rng.s[2] = 3;
+    atg[0].iq.latency = 2;
+    atg[0].iq.bandwidth = 1;
+    atg[0].oq.latency = 2;
+    atg[0].oq.bandwidth = 1;
+    
+    atg[1].addr2 = tg[1]->addr2;
+    atg[1].size = 8;
+    atg[1].threshold = (unsigned)((0xFFFFFFFF/interval[1]) + 0.5);
+    VVDISP ("TG (%d) threshold 0x%08x %d", atg[1].addr2, atg[1].threshold, atg[1].threshold);
+    atg[1].sendto = tg[0]->addr2;
+    atg[1].def_router = tg[0]->addr2;
+    atg[1].rng.s[0] = 7;
+    atg[1].rng.s[1] = 9;
+    atg[1].rng.s[2] = 11;
+    atg[1].iq.latency = 2;
+    atg[1].iq.bandwidth = 1;
+    atg[1].oq.latency = 2;
+    atg[1].oq.bandwidth = 1;
+    
+    for (int i = 0; i < 2; i ++)
+    {
+        if ((atg[i].rng.s[0] & -2) == 0)   atg[i].rng.s[0] -= 1023;
+        if ((atg[i].rng.s[1] & -8) == 0)   atg[i].rng.s[1] -= 1023;
+        if ((atg[i].rng.s[2] & -16) == 0)  atg[i].rng.s[2] -= 1023;
+
+        VVDISP ("TG (%d) srand 0x%08x 0x%08x 0x%08x", tg[i]->addr2, atg[i].rng.s[0], atg[i].rng.s[1], atg[i].rng.s[2]);
+        
+        tg[i]->init_bernoulli (atg[i].size + 1, interval[i], atg[i].sendto);
+        tg[i]->srand (atg[i].rng.s[0], atg[i].rng.s[1], atg[i].rng.s[2]);
+        tg[i]->set_iqueue (atg[i].iq.latency, atg[i].iq.bandwidth);
+        tg[i]->set_oqueue (atg[i].oq.latency, atg[i].oq.bandwidth);
+        tg[i]->def_router.addr2 = atg[i].def_router;
+        tg[i]->def_router.port = 0;
+        tg[i]->def_router.VC = 0;
+    }
+    
+    // Work out the config vectors
+    FILE *fp = NULL;
+    fp = fopen ("config.bin", "wb");
+    atg[0].print_config (fp);
+    config_length = atg[0].num_config_bytes() / 2;    // 16-bit words
+    config_sent = 0;
+    fclose (fp);
+
+    config_fp = fopen ("config.bin", "rb");
+    
+    // Simulation data
+    sim_time.warmup = 0;
+    sim_time.measurement = 200;
+    sim_time.drain = 1000;
+
+    sw_flit_ack = false;
+    memset (sw_ready, 0, sizeof(sw_ready));
+    memset (sw_flit, 0, sizeof(sw_flit));
+
+    VVDISP ("hello T %d CLK %d", T, CLK);
+    
+    state = RESET;
+    
+    return 0;
+}
+
+#if C_TEST
+int test_tg ()
+{
+    int vreset;
+    int venable;
+    int vtsim;
+    int vtsim_tick;
+    int vconfig_in_valid;
+    int vconfig_in;
+    int vstats_shift;
+    int vflit_in_valid;
+    int vflit_in;
+    int vnexthop_in;
+    int vdequeue;
+    int vmeasure;
+
+    int *reset;
+    int *enable;
+    int *tsim;
+    int *tsim_tick;
+    int *config_in_valid;
+    int *config_in;
+    int *stats_shift;
+    int *flit_in_valid;
+    int *flit_in;
+    int *nexthop_in;
+    int *dequeue;
+    int *measure;
+
+    reset = &vreset;
+    enable = &venable;
+    tsim = &vtsim;
+    tsim_tick = &vtsim_tick;
+    config_in_valid = &vconfig_in_valid;
+    config_in = &vconfig_in;
+    stats_shift = &vstats_shift;
+    flit_in_valid = &vflit_in_valid;
+    flit_in = &vflit_in;
+    nexthop_in = &vnexthop_in;
+    dequeue = &vdequeue;
+    measure = &vmeasure;
+
+#else
+int test_tg (
+    svLogic *reset,
+    svLogic *enable,
+    svLogicVecVal tsim[SV_PACKED_DATA_NELEMS(TS_WIDTH)],
+    svLogic *tsim_tick,
+    svLogic *config_in_valid,
+    svLogicVecVal config_in[SV_PACKED_DATA_NELEMS(16)],
+    svLogic *stats_shift,
+    const svLogicVecVal *hw_stats_out,
+    svLogic *flit_in_valid,
+    svLogicVecVal flit_in[SV_PACKED_DATA_NELEMS(FLIT_WIDTH)],
+    svLogicVecVal nexthop_in[SV_PACKED_DATA_NELEMS(ADDR_WIDTH+LOG_NVCS)],
+    svLogicVecVal dequeue[SV_PACKED_DATA_NELEMS(NVCS)],     // 2 VCs
+    svLogic *measure,
+    svLogic hw_flit_ack,
+    const svLogicVecVal *hw_flit_out_valid,
+    const svLogicVecVal *hw_flit_out
+)
+{
+#endif
+    unsigned int flit_hi, flit_lo;
+    unsigned int nexthop;
+
+    //
+    // Check HW output
+    // ***********************************************************
+#if C_TEST == 0
+    // flit_ack
+    if (sw_flit_ack != (hw_flit_ack == sv_1))
+    {
+        VVDISP ("MISMATCH: CLK %d T %d sw ack %d hw ack %d", CLK, T, sw_flit_ack ? 1 : 0, (hw_flit_ack == sv_1) ? 1 : 0);
+        return 1;
+    }
+
+    // flit_out_valid and flit_out
+    for (int v = 0; v < NVCS; v ++)
+    {
+        bool hw_vc_ready = (svGetBitselLogic (hw_flit_out_valid, v) == sv_1);
+        unsigned int hw_flit_hi, hw_flit_lo;
+
+        get_logic (hw_flit_out, 32, v * FLIT_WIDTH, &hw_flit_lo);
+        get_logic (hw_flit_out, FLIT_WIDTH - 32, v * FLIT_WIDTH + 32, &hw_flit_hi);
+
+        if (hw_vc_ready != sw_ready[v])
+        {
+            VVDISP ("MISMATCH: CLK %d T %d sw ready %d hw ready %d", CLK, T, sw_ready[v] ? 1 : 0, hw_vc_ready ? 1 : 0);
+            VVDISP ("MISMATCH: CLK %d T %d sw flit 0x%04x%08x hw flit 0x%04x%08x", CLK, T,
+                sw_flit[v][1], sw_flit[v][0], hw_flit_hi, hw_flit_lo);
+           return 1;
+        }
+
+        // flit_out (last 5 bits are unused, and contains the pid in the sw version)
+        if (hw_vc_ready && (hw_flit_hi != sw_flit[v][1] || ((hw_flit_lo ^ sw_flit[v][0]) & 0xFFFFFE00) != 0))
+        {
+            VVDISP ("MISMATCH: CLK %d T %d sw flit 0x%04x%08x hw flit 0x%04x%08x", CLK, T,
+                sw_flit[v][1], sw_flit[v][0], hw_flit_hi, hw_flit_lo);
+            return 1;
+        }
+    }
+#endif
+
+    // Default value for softare reference data
+    sw_flit_ack = false;
+    memset (sw_ready, 0, sizeof(sw_ready));
+
+    
+    //
+    // Generate Stimuli
+    // ***********************************************************
+
+    if (state == UNINIT)
+        return 0;
+
+
+    // Default values
+    *reset = sv_0;
+    *enable = sv_0;
+    *tsim_tick = sv_0;
+    *config_in_valid = sv_0;
+    *stats_shift = sv_0;
+    *flit_in_valid = sv_0;
+    *measure = sv_0;
+
+    put_logic (tsim, TS_WIDTH, 0, 0);
+    put_logic (flit_in, FLIT_WIDTH, 0, 0);
+    put_logic (nexthop_in, ADDR_WIDTH + LOG_NVCS, 0, 0);
+    put_logic (dequeue, NVCS, 0, tg_dequeue);
+    put_logic (config_in, 16, 0, 0);
+
+    // Testing (most common case)
+    if (state == TEST)
+    {
+        unsigned int earliest_ready = UINT_MAX;
+        bool tg_ready[2] = {false, false};
+        tg_dequeue = 0;
+
+        *enable = sv_1;
+        *measure = sv_1;
+        put_logic (tsim, TS_WIDTH, 0, (unsigned long long)T);
+        
+        // "Deliver" ready flits
+        for (int i = 0; i < 2; i ++)
+        {
+            for (int b = 0; b < NUM_IC_BUSES; b++)
+            {
+                for (int v = 0; v < FlitQueue::nVCs; v++)
+                {
+                    if (tg[i]->ready (b, v))
+                    {
+                        const Flit *f = tg[i]->ready (b, v);
+                        VVDISP ("%5u %5u: TG (%d) [%d %d] flit ready pid %d dest %d nexthop %d", 
+                            CLK, T, tg[i]->addr2, b, v, f->data, f->addr3, f->nexthop.addr2);
+                        tg[1-i]->push (tg[i]->ready (b, v));
+                        tg[i]->pop (b, v);
+                        
+                        form_flit (f, &flit_hi, &flit_lo);
+                        nexthop = (f->nexthop.addr2 << LOG_NVCS) | v;
+
+                        put_logic (flit_in, 32, 0, flit_lo);
+                        put_logic (flit_in, FLIT_WIDTH-32, 32, flit_hi);
+                        put_logic (nexthop_in, ADDR_WIDTH + LOG_NVCS, 0, nexthop);
+
+                        VVDISP ("            flit 0x%08x%08x nexthop 0x%04x", flit_hi, flit_lo, nexthop);
+                    
+                        earliest_ready = min (earliest_ready, f->timestamp);
+                        tg_ready[i] = true;
+
+                        // Need to dequeue the uut TG
+                        if (i == 0)
+                        {
+                            tg_dequeue = tg_dequeue | (1 << v);
+
+                            sw_flit[v][0] = flit_lo;
+                            sw_flit[v][1] = flit_hi;
+                            sw_ready[v] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        sw_flit_ack = tg_ready[1];                     // TG(1) is test driver
+        *flit_in_valid = (tg_ready[1]) ? sv_1 : sv_0;
+        
+        // Check if we should increment global time
+        if (earliest_ready > T && tg[0]->can_increment () && tg[1]->can_increment ())
+            DT = 1;
+        else
+            DT = 0;
+        
+        // Tick nodes
+        tg[0]->tick ();
+        tg[1]->tick ();
+        
+        // Increment global time counter
+        T += DT;
+
+        if (CLK > SIM_CLKS)
+            state = DONE;
+    }
+    else if (state == DONE)
+    {
+        *enable = sv_1;
+        *measure = sv_0;
+
+        // Print out TG stats
+        if (tg[0] != NULL)      tg[0]->print_usage ();
+
+        // Cleanup
+        if (tg[0] != NULL)      { delete tg[0]; tg[0] = NULL; }
+        if (tg[1] != NULL)      { delete tg[1]; tg[1] = NULL; }
+        if (config_fp != NULL)  { fclose (config_fp); config_fp = NULL; }
+    }
+    // Wait a bit before starting the test
+    else if (state == WAIT)
+    {
+        if (test_init_wait < 10)
+            test_init_wait ++;
+        else
+            state = TEST;
+    }
+    // Send config words
+    else if (state == CONFIG)
+    {
+        if (config_sent < config_length)
+        {
+            unsigned int config_word;
+            size_t result;
+
+            *reset = sv_0;
+            *enable = sv_0;
+            put_logic (tsim, TS_WIDTH, 0, 0);
+            *tsim_tick = sv_0;
+
+            result = fread (&config_word, 2, 1, config_fp);
+            if (result != 1)
+            {
+                VVDISP ("Reading error (result = %d)", (int)result);
+                return 0;
+            }
+
+            *config_in_valid = sv_1;
+            put_logic (config_in, 16, 0, (unsigned long long)config_word);
+            VVDISP ("Sending config_word[%d] = 0x%04x", config_sent, config_word);
+            config_sent ++;
+        
+            *flit_in_valid = sv_0;
+            put_logic (flit_in, FLIT_WIDTH, 0, 0);
+            put_logic (nexthop_in, ADDR_WIDTH + LOG_NVCS, 0, 0);
+            put_logic (dequeue, NVCS, 0, 0);
+        }
+        else
+        {
+            state = WAIT;
+        }
+    }
+    // Reset simulator
+    else if (state == RESET)
+    {
+        if (CLK == 0)
+            *reset = sv_0;
+        else if (CLK == 1)
+            *reset = sv_1;
+        else if (CLK == 2)
+        {
+            *reset = sv_0;
+            state = CONFIG;
+        }
+    }
+
+    // Increment FPGA clock
+    CLK ++;
+
+    return 0;
+}
+
+#if C_TEST
+int main (void)
+{
+    c_init ();
+
+    for (int clk = 0; clk < 500; clk ++)
+    {
+        test_tg ();
+    }
+}
+
+#endif
+

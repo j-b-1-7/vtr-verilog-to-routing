@@ -1,0 +1,311 @@
+/* System Test
+ *
+ * sim_test.c
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include "const.h"
+
+
+#if C_TEST
+#define V_DISP(x) printf("%s\n", x)
+#define sv_0 0
+#define sv_1 1
+#else
+#include "svdpi.h"
+#include "dpiheader.h"
+#define V_DISP(x) v_disp(x)
+#endif
+
+#define myprintf(fmt,...) printf("%5u  ", CLK); printf(fmt,##__VA_ARGS__)
+#define VVDISP(fmt,...) sprintf(buf, fmt,##__VA_ARGS__); V_DISP(buf)
+
+/* Global variables for the sim CPP files */
+
+unsigned int CLK;					    // Simulation clock cycles
+bool sim_verbose = false;
+
+#define SIM_STEPS 200
+
+/********** Test States **********************************************/
+
+typedef enum {
+    UNINIT = 0,
+    RESET,
+    CONFIG,
+    WAIT,
+    TEST,
+    STATS,
+    DONE,
+    NUM_TEST_STATES
+} e_test_state;
+
+e_test_state state = UNINIT;
+
+const char config_file[] = "data/m3x3_arch8x8.bin";          // Configuration input file
+const char stats_file[] = "data/m3x3_arch8x8.out.golden";    // Stats reference output file
+
+FILE *config_fp = NULL;
+long config_length = 0;
+long config_sent = 0;
+
+FILE *stats_fp = NULL;
+int stats_length;
+int stats_received = 0;
+
+int test_init_wait = 0;
+
+char buf[100];
+
+
+/********** Helper Functions *********************************************/
+
+#if C_TEST
+void put_logic (int *d, int len, int offset, unsigned int s) {}
+#else
+void put_logic (svLogicVecVal *d, int len, int offset, unsigned int s)
+{
+    for (int i = 0; i < len; i++)
+    {
+        svPutBitselLogic(d, i+offset, (s&(1<<i)) ? sv_1 : sv_0);
+    }
+}
+#endif
+
+#if C_TEST
+void get_logic (void *s, int len, int offset, unsigned int *d)
+{
+    *d = 0;
+}
+#else
+void get_logic (const svLogicVecVal *s, int len, int offset, unsigned int *d)
+{
+    unsigned int temp = 0;
+    for (int i = offset + len - 1; i >= offset; i--)
+    {
+        temp = (temp << 1) | (svGetBitselLogic(s, i) == sv_1 ? 1 : 0);
+    }
+    *d = temp;
+}
+#endif
+
+
+/********** Test Functions ***********************************************/
+
+int c_init ()
+{
+    CLK = 0;
+
+#if C_TEST    
+    // Print verbose simulator messages
+    sim_verbose = true;
+#else
+    sim_verbose = false;
+#endif
+
+    config_fp = fopen (config_file, "rb");
+
+    if (config_fp == NULL)
+    {
+        VVDISP ("Error opening config file '%s'", config_file);
+        return 1;
+    }
+
+    // Obtain config file size in bytes
+    fseek (config_fp, 0, SEEK_END);
+    config_length = ftell (config_fp);
+    rewind (config_fp);
+
+    // Start simulation in reset state
+    VVDISP ("hello CLK %d Config %ld bytes", CLK, config_length);
+    state = RESET;
+   
+    return 0;
+}
+
+
+#if C_TEST
+int test_sim ()
+{
+    int vreset;
+    int venable;
+    int vconfig_in_valid;
+    int vconfig_in;
+    int vstats_shift;
+    int vstats_out;
+    int vsim_time;
+
+    int *reset = &vreset;
+    int *enable = &venable;
+    int *config_in_valid = &vconfig_in_valid;
+    int *config_in = &vconfig_in;
+    int *stats_shift = &vstats_shift;
+    int *stats_out = &vstats_out;
+    int quiescent;
+    int *sim_time = &vsim_time;
+
+#else
+int test_sim (
+    svLogic *reset,
+    svLogic *enable,
+    svLogic *config_in_valid,
+    svLogicVecVal config_in[SV_PACKED_DATA_NELEMS(16)],
+    svLogic *stats_shift,
+    const svLogicVecVal *stats_out,
+    const svLogic quiescent,
+    const svLogicVecVal *sim_time
+)
+{
+#endif
+
+    if (state == UNINIT)
+        return 0;
+
+    VVDISP ("State %d CLK %d", state, CLK);
+
+    *reset = sv_0;
+    *enable = sv_0;
+    *config_in_valid = sv_0;
+    put_logic (config_in, 16, 0, 0);
+    *stats_shift = sv_0;
+
+    // Testing (most common case)
+    if (state == TEST)
+    {
+        unsigned int stime = 0;
+#if C_TEST
+        stime = CLK;
+#else
+        get_logic (sim_time, 10, 0, &stime);
+#endif
+
+        *enable = sv_1;
+
+        if (stime >= SIM_STEPS)
+            state = STATS;
+    }
+    // Reset state
+    else if (state == RESET)
+    {
+        if (CLK == 0)
+            *reset = sv_0;
+        else if (CLK == 1)
+            *reset = sv_1;
+        else if (CLK == 2)
+        {
+            *reset = sv_0;
+            state = CONFIG;
+        }
+    }
+    // Sending config words
+    else if (state == CONFIG)
+    {
+        if (config_sent < config_length)
+        {
+            // Read 2 bytes from the config file
+            unsigned int config_word = 0;
+            size_t result;
+
+            result = fread (&config_word, 2, 1, config_fp);
+            if (result != 1)
+            {
+                VVDISP ("Can't read 2 bytes");
+                return 2;
+            }
+
+            *config_in_valid = sv_1;
+            put_logic (config_in, 16, 0, config_word);
+            VVDISP ("Sending config double word (%ld) = 0x%04x length %ld", config_sent, config_word, config_length);
+            config_sent += 2;
+        }
+        else
+        {
+            fclose (config_fp);
+            state = WAIT;
+        }
+    }
+    // Wait before starting simulation
+    else if (state == WAIT)
+    {
+        if (test_init_wait < 10)
+            test_init_wait ++;
+        else
+            state = TEST;
+    }
+    // Collect stats state
+    else if (state == STATS)
+    {
+        if (stats_received == 0)
+        {
+            VVDISP ("Collecting stats");
+
+            // Initialize the stats file
+            stats_fp = fopen (stats_file, "r");
+            fscanf (stats_fp, "%d", &stats_length);
+
+            VVDISP ("Number of stats word to read: %d\n", stats_length);
+        }
+
+        // Disable simulator
+        *enable = sv_0;
+
+        // Read stats
+        if (stats_received == stats_length)
+        {
+            *stats_shift = sv_0;
+            state = DONE;
+        }
+        else
+        {
+            unsigned int stats_word_ref = 0;
+            unsigned int stats_word = 0;
+
+            *stats_shift = sv_1;
+            stats_received ++;
+
+            // Read a word from the stats file
+            fscanf (stats_fp, "%x", &stats_word_ref);
+
+            // Read a word from the simulator
+#if C_TEST
+            stats_word = stats_word_ref;
+#else
+            get_logic (stats_out, 16, 0, &stats_word);
+#endif
+            VVDISP ("Stats word %d/%d: 0x%04x expecting 0x%04x\n", stats_received, stats_length, stats_word, stats_word_ref);
+
+            if (stats_word != stats_word_ref)
+            {
+                VVDISP ("Mismatched output!\n");
+                return 4;
+            }
+
+        }
+    }
+    // Done state
+    else if (state == DONE)
+    {
+        VVDISP ("Simulation done!");
+        return 3;
+    }
+
+    // Increment FPGA clock
+    CLK ++;
+
+    return 0;
+}
+
+#if C_TEST
+int main (void)
+{
+    c_init ();
+
+    while (test_sim() == 0);
+
+
+}
+
+#endif
+

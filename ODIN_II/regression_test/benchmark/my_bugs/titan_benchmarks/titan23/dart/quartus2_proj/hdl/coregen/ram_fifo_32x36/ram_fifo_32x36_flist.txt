@@ -1,0 +1,7 @@
+# Output products list for <ram_fifo_32x36>
+ram_fifo_32x36.xco
+ram_fifo_32x36.v
+ram_fifo_32x36_xmdf.tcl
+ram_fifo_32x36_flist.txt
+ram_fifo_32x36.veo
+ram_fifo_32x36.ngc

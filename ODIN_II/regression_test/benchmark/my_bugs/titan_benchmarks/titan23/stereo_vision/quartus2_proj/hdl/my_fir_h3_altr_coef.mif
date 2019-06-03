@@ -1,0 +1,20 @@
+----- ! -------- W A R N I N G -------- ! -----
+----- ! -------- W A R N I N G -------- ! -----
+----- ! -------- FIR COMPILER GENERATED FILE --- ! -----
+----- DO NOT ATTEMPT TO MODIFY! -----
+
+WIDTH = 9;
+DEPTH = 256;
+ADDRESS_RADIX = DEC;
+DATA_RADIX = DEC;
+
+CONTENT
+  BEGIN
+    0 : 503;
+    1 : 456;
+    2 : 382;
+    3 : 0;
+    4 : 130;
+    5 : 56;
+    6 : 9;
+  END;

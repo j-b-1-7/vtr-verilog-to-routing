@@ -1,0 +1,146 @@
+/* Helper functions used in DPI testbenches for DART
+ */
+#include "dpi_dart.h"
+
+int min (int a, int b)
+{
+    return (a < b) ? a : b;
+}
+
+test_signal new_test_signal (int width)
+{
+    test_signal value;
+
+    value.width = width;
+    value.elemwidth = width;
+
+    if (width <= 32)
+    {
+        value.is_array = false;
+        value.v.value = 0;
+    }
+    else
+    {
+        value.is_array = true;
+        value.v.arrayvalue = new unsigned int [(width+31)/32];
+    }
+
+    return value;
+}
+
+test_signal new_test_signal_vector (int nelems, int elemwidth)
+{
+    test_signal value;
+
+    value.width = nelems * elemwidth;
+    value.elemwidth = elemwidth;
+    value.is_array = true;
+    value.v.arrayvalue = new unsigned int [nelems * ((elemwidth+31)/32)];
+
+    return value;
+}
+
+void free_test_signal (test_signal val)
+{
+    if (val.is_array)
+    {
+        delete [] val.v.arrayvalue;
+    }
+}
+
+void put_logic (svLogicVecVal *d, int len, int offset, unsigned int s)
+{
+#if C_TEST
+    *d = 0;
+#else
+    for (int i = 0; i < len; i++)
+    {
+        svPutBitselLogic(d, i+offset, (s&(1<<i)) ? sv_1 : sv_0);
+    }
+#endif
+}
+
+void get_logic (const svLogicVecVal *s, int len, int offset, unsigned int *d)
+{
+#if C_TEST
+    *d = 0;
+#else
+    unsigned int temp = 0;
+    for (int i = offset + len - 1; i >= offset; i--)
+    {
+        temp = (temp << 1) | (svGetBitselLogic(s, i) == sv_1 ? 1 : 0);
+    }
+    *d = temp;
+#endif
+}
+
+void put (svLogic *d, test_signal &val)
+{
+    *d = (val.v.value == 0) ? sv_0 : sv_1;
+}
+
+void get (const svLogic *s, test_signal &val)
+{
+    val.v.value = (*s == sv_0) ? 0 : 1;
+}
+
+void put_vec (svLogicVecVal *d, test_signal &val)
+{
+    if (val.width <= 32)
+    {
+        put_logic (d, val.width, 0, val.v.value);
+    }
+    else
+    {
+        // Values are represented by a vector of elemwidth-bit elements
+        int offset = 0;
+        int nelems = val.width / val.elemwidth;
+        int nwords = (val.elemwidth + 31)/32;       // ceil(val.elemwidth/32)
+
+        for (int i = 0; i < nelems; i ++)
+        {
+            // Each element is stored in an array of 32-bit elements
+            for (int n = 0; n < nwords; n ++)
+            {
+                int nbits_new = min ((val.elemwidth - n*32), 32);
+                put_logic (d, nbits_new, offset, val.v.arrayvalue[i*nwords+n]);
+                offset += nbits_new;
+            }
+        }
+    }
+}
+
+void get_vec (const svLogicVecVal *s, test_signal &val)
+{
+    if (val.width <= 32)
+    {
+        get_logic (s, val.width, 0, &(val.v.value));
+    }
+    else
+    {
+        // Values are represented by a vector of elemwidth-bit elements
+        int offset = 0;
+        int nelems = val.width / val.elemwidth;
+        int nwords = (val.elemwidth + 31)/32;       // ceil(val.elemwidth/32)
+
+        for (int i = 0; i < nelems; i++)
+        {
+            // Store each element in an array of 32-bit elements
+            for (int n = 0; n < nwords; n ++)
+            {
+                int nbits_new = min ((val.elemwidth - n*32), 32);
+                get_logic (s, nbits_new, offset, &(val.v.arrayvalue[i*nwords+n]));
+                offset += nbits_new;
+            }
+        }
+    }
+}
+
+void form_flit (const Flit *f, unsigned *flit_hi, unsigned *flit_lo)
+{
+    unsigned src_inj_ts = f->is_head ? f->source : f->injection_ts;
+    *flit_lo = ((f->timestamp & 0x000001FF)<<23) | ((f->addr3 & 0x000000FF)<<15) | ((src_inj_ts & 0x000003FF)<<5) | (f->nexthop.VC & 0x3);
+    *flit_hi = ((f->is_head ? 1 : 0)<<3) | ((f->is_tail ? 1 : 0)<<2) | ((f->measure ? 1 : 0)<<1) | ((f->timestamp & 0x000003FF)>>9);
+}
+
+

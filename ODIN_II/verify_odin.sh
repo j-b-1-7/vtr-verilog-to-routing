@@ -853,6 +853,11 @@ function run_all() {
 	run_light_suite
 	run_heavy_suite
 }
+		jobs -p | xargs kill &> /dev/null
+		pkill odin_II &> /dev/null
+		pkill ${THIS_SCRIPT_EXEC} &> /dev/null
+		#should be dead by now
+		exit 120
 
 function run_vtr_reg() {
 	cd ${VTR_ROOT_DIR}

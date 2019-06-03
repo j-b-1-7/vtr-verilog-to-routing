@@ -1,0 +1,37 @@
+set IPPATH ip/lu_new/
+
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_we_swiz.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_top.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_net_write_curleft.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_net_write_top.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_net_read.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_curleft.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_ram_addr_swiz.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_pipe_ctrl.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_clock_cross.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_main_ctrl.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_net_iface.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_pipeline.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_top.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH ctrl_net_iface_ctrl.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH ctrl_net_iface_dp.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH ctrl_top.sv] -library lib_system
+set_global_assignment -name VERILOG_FILE [file join $IPPATH divsp.v] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH lu_new_pkg.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH lu_new_top.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH lu_qsys_wrapper.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH memnode_top.sv] -library lib_system
+set_global_assignment -name VERILOG_FILE [file join $IPPATH multsplat11.v] -library lib_system
+set_global_assignment -name VERILOG_FILE [file join $IPPATH pipe_delay.v] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH pipe_interlock.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH router.sv] -library lib_system
+set_global_assignment -name VERILOG_FILE [file join $IPPATH subsplat11.v] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH mem_interface.sv] -library lib_system
+set_global_assignment -name SDC_FILE [file join $IPPATH lu_new.sdc] -library lib_system
+
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH lu_new_top_arb.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH memnode_top_arb.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH ctrl_top_arb.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH cpu_top_arb.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH many_to_one.sv] -library lib_system
+set_global_assignment -name SYSTEMVERILOG_FILE [file join $IPPATH one_to_many.sv] -library lib_system

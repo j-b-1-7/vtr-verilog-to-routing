@@ -1,0 +1,555 @@
+/* Standalone test for FlitQueue
+ *
+ * fq_test.c
+ */
+#include <stdio.h>
+#include <string>
+#include <string.h>
+#include <limits.h>
+#include <math.h>
+#include <map>
+
+#include "dpi_dart.h"
+
+using namespace std;
+
+/* Global variables for the sim CPP files */
+
+unsigned int T; 					    // Simulation time
+unsigned int CLK;					    // Simulation clock cycles
+
+#define SIM_CLKS 1000
+#define NVCS 2
+
+/********** Test States **********************************************/
+
+typedef enum {
+    UNINIT = 0,
+    RESET,
+    CONFIG,
+    TEST,
+    CLEANUP,
+    DONE,
+    NUM_TEST_STATES
+} e_test_state;
+
+map<string, test_signal> test_pins;
+map<e_test_state, t_test_func> test_functions;
+
+
+// Functions that handle each test state
+int test_reset ();
+int test_config ();
+int test_run_test ();
+int test_cleanup ();
+int test_done ();
+
+FILE *config_fp = NULL;
+long config_length = 1;
+long config_sent = 0;
+
+FILE *trace_fp = NULL;
+unsigned int tr_CLK = 0;
+unsigned int tr_T = 0;
+
+unsigned int counter = 0;
+e_test_state state = UNINIT;
+
+
+/********** Test Functions ***********************************************/
+
+int c_init ()
+{
+    T = 0;
+    CLK = 0;
+
+    // Register UUT signals
+    // This is to make the values global so the test functions can have access to them
+    test_pins["reset"] = new_test_signal (1);
+    test_pins["enable"] = new_test_signal (1);
+    test_pins["tsim"] = new_test_signal (TS_WIDTH);
+    test_pins["tsim_tick"] = new_test_signal (1);
+    test_pins["config_in"] = new_test_signal (16);
+    test_pins["config_in_valid"] = new_test_signal (1);
+    test_pins["flit_in"] = new_test_signal_vector (10, FLIT_WIDTH);
+    test_pins["flit_in_valid"] = new_test_signal (10);
+    test_pins["flit_ack"] = new_test_signal (1);
+    test_pins["flit_out"] = new_test_signal (FLIT_WIDTH);
+    test_pins["flit_out_valid"] = new_test_signal (1);
+    test_pins["nexthop_out"] = new_test_signal (A_WIDTH);
+    test_pins["dequeue"] = new_test_signal (1);
+    test_pins["credit_in"] = new_test_signal_vector (5, CREDIT_WIDTH);
+    test_pins["credit_in_valid"] = new_test_signal (5);
+    test_pins["credit_ack"] = new_test_signal (1);
+    test_pins["credit_out"] = new_test_signal (CREDIT_WIDTH);
+    test_pins["credit_out_valid"] = new_test_signal (1);
+    test_pins["credit_out_nexthop"] = new_test_signal (A_WIDTH);
+    test_pins["credit_dequeue"] = new_test_signal (1);
+
+    // These pins are software output used to verify hardware output
+    test_pins["sw_flit_out"] = new_test_signal (FLIT_WIDTH);
+    test_pins["sw_nexthop_out"] = new_test_signal (A_WIDTH);
+    test_pins["sw_credit_out"] = new_test_signal (CREDIT_WIDTH);
+    test_pins["sw_credit_out_nexthop"] = new_test_signal (A_WIDTH);
+
+    // Register the test functions
+    test_functions[RESET] = test_reset;
+    test_functions[CONFIG] = test_config;
+    test_functions[TEST] = test_run_test;
+    test_functions[CLEANUP] = test_cleanup;
+    test_functions[DONE] = test_done;
+
+    // Open the configuration file
+    config_fp = fopen (CONFIG_FILE, "rb");
+
+    if (config_fp == NULL)
+    {
+        myprintf ("Error opening config file '%s'", CONFIG_FILE);
+        return 1;
+    }
+
+    // Obtain config file size in bytes
+    fseek (config_fp, 0, SEEK_END);
+    config_length = ftell (config_fp);
+    rewind (config_fp);
+    config_sent = 0;
+
+    // Open the trace file
+    trace_fp = fopen (TRACE_FILE, "r");
+
+    if (trace_fp == NULL)
+    {
+        myprintf ("Error opening trace file '%s'", TRACE_FILE);
+        return 2;
+    }
+    fscanf (trace_fp, "%d %d", &tr_CLK, &tr_T);
+
+
+    // Start simulation in reset state
+    myprintf ("hello T %d CLK %d", T, CLK);
+    state = RESET;
+    
+    return 0;
+}
+
+
+int test (
+    svLogic *reset,
+    svLogic *enable,
+    svLogicVecVal tsim[SV_PACKED_DATA_NELEMS(TS_WIDTH)],
+    svLogic *tsim_tick,
+    svLogic *config_in_valid,
+    svLogicVecVal config_in[SV_PACKED_DATA_NELEMS(16)],
+
+    svLogicVecVal flit_in[SV_PACKED_DATA_NELEMS(FLIT_WIDTH*10)],    // NINPUTS = 5 ports x 2 VCs = 10
+    svLogicVecVal flit_in_valid[SV_PACKED_DATA_NELEMS(10)],
+    const svLogic flit_ack,
+
+    const svLogicVecVal *flit_out,
+    const svLogic flit_out_valid,
+    const svLogicVecVal *nexthop_out,
+    svLogic *dequeue,
+
+    svLogicVecVal credit_in[SV_PACKED_DATA_NELEMS(CREDIT_WIDTH*5)],
+    svLogicVecVal credit_in_valid[SV_PACKED_DATA_NELEMS(5)],
+    const svLogic credit_ack,
+
+    const svLogicVecVal *credit_out,
+    const svLogic credit_out_valid,
+    const svLogicVecVal *credit_out_nexthop,
+    svLogic *credit_dequeue
+)
+{
+    int result = 0;
+
+    // Register all inputs
+    get     (&flit_ack, test_pins["flit_ack"]);
+    get_vec (flit_out, test_pins["flit_out"]);
+    get     (&flit_out_valid, test_pins["flit_out_valid"]);
+    get_vec (nexthop_out, test_pins["nexthop_out"]);
+
+    get     (&credit_ack, test_pins["credit_ack"]);
+    get_vec (credit_out, test_pins["credit_out"]);
+    get     (&credit_out_valid, test_pins["credit_out_valid"]);
+    get_vec (credit_out_nexthop, test_pins["credit_out_nexthop"]);
+
+
+    // Tick software model
+    map<e_test_state, t_test_func>::const_iterator match;
+    match = test_functions.find (state);
+
+    if (match != test_functions.end())
+    {
+        result = (match->second)();
+    }
+    else
+    {
+        myprintf ("Unknown test state %d\n", state);
+        result = 1;
+    }
+
+
+    // Send all outputs
+    put (reset, test_pins["reset"]);
+    put (enable, test_pins["enable"]);
+
+    put_vec (tsim, test_pins["tsim"]);
+    put (tsim_tick, test_pins["tsim_tick"]);
+
+    put_vec (config_in, test_pins["config_in"]);
+    put (config_in_valid, test_pins["config_in_valid"]);
+
+    put_vec (flit_in, test_pins["flit_in"]);
+    put_vec (flit_in_valid, test_pins["flit_in_valid"]);
+
+    put_vec (credit_in, test_pins["credit_in"]);
+    put_vec (credit_in_valid, test_pins["credit_in_valid"]);
+
+    put (dequeue, test_pins["dequeue"]);
+    put (credit_dequeue, test_pins["credit_dequeue"]);
+
+
+    // Increment FPGA clock
+    CLK ++;
+
+
+    return result;
+}
+
+
+int test_reset ()
+{
+    CLK = 0;
+
+    test_pins["reset"].v.value = 1;
+    test_pins["enable"].v.value = 0;
+
+    if (counter < 10)
+    {
+        counter ++;
+    }
+    else
+    {
+        state = CONFIG;
+        test_pins["reset"].v.value = 0;
+    }
+
+    return 0;
+}
+
+int test_config ()
+{
+    test_pins["config_in_valid"].v.value = 0;
+
+    if (counter > 0)
+    {
+        counter --;
+    }
+    else
+    {
+        //if ((CLK % 2 == 1) && (config_sent < config_length))
+        if (config_sent < config_length)
+        {
+            // Read 2 bytes from the config file
+            unsigned int config_word = 0;
+            size_t result;
+
+            result = fread (&config_word, 2, 1, config_fp);
+            if (result != 1)
+            {
+                myprintf ("Can't read 2 bytes");
+                return 2;
+            }
+
+            test_pins["config_in_valid"].v.value = 1;
+            test_pins["config_in"].v.value = config_word;
+            //myprintf ("Sending config double word (%ld) = 0x%04x length %ld\n", 
+            //    config_sent, config_word, config_length);
+            if ((config_sent & 0xF) == 0)
+            {
+                printf ("Config (%6ld of %6ld) %04x", config_sent, config_length, config_word);
+            }
+            else
+            {
+                printf (" %04x", config_word);
+                if ((config_sent & 0xF) == 0xE) printf ("\n");
+            }
+            config_sent += 2;
+        }
+        else
+        {
+            printf ("\n");
+            fclose (config_fp);
+            state = TEST;
+        }
+    }
+    return 0;
+}
+
+int test_run_test ()
+{
+    char buf[255];
+
+    test_pins["config_in_valid"].v.value = 0;
+    test_pins["enable"].v.value = 0;
+
+    if (counter < 10)
+    {
+        counter ++;
+        CLK = 0;
+    }
+    else
+    {
+        test_pins["reset"].v.value = 0;
+        test_pins["enable"].v.value = 1;
+        test_pins["config_in_valid"].v.value = 0;
+        test_pins["tsim_tick"].v.value = 0;
+        test_pins["flit_in_valid"].v.value = 0;
+        test_pins["credit_in_valid"].v.value = 0;
+
+        test_pins["credit_dequeue"].v.value = 0;
+        test_pins["dequeue"].v.value = 0;
+
+        // Process UUT output
+        if (test_pins["flit_out_valid"].v.value == 1)
+        {
+            test_pins["flit_out"].v.arrayvalue[0] = test_pins["flit_out"].v.arrayvalue[0] & 0xFFFFFFE3; // Masks out the oport portion
+            myprintf ("UUT.flit_out %2x %08x nexthop %03x\n", test_pins["flit_out"].v.arrayvalue[1], 
+                test_pins["flit_out"].v.arrayvalue[0], test_pins["nexthop_out"].v.value);
+
+            test_pins["dequeue"].v.value = 1;
+
+            // Check result with software
+            if ((test_pins["flit_out"].v.arrayvalue[0] != test_pins["sw_flit_out"].v.arrayvalue[0]) ||
+                (test_pins["flit_out"].v.arrayvalue[1] != test_pins["sw_flit_out"].v.arrayvalue[1]))
+            {
+                myprintf ("Mismatched flit\n");
+            }
+
+            if (test_pins["nexthop_out"].v.value != test_pins["sw_nexthop_out"].v.value)
+            {
+                myprintf ("Mismatched nexthop %03x %03x\n", test_pins["nexthop_out"].v.value, test_pins["sw_nexthop_out"].v.value);
+            }
+        }
+
+        if (test_pins["credit_out_valid"].v.value == 1)
+        {
+            myprintf ("UUT.credit_out %03x nexthop %03x ts %d VC %d\n", test_pins["credit_out"].v.value,
+                test_pins["credit_out_nexthop"].v.value, (test_pins["credit_out"].v.value & 0x3FF), 
+                (test_pins["credit_out"].v.value & 0x400)>>10);
+
+            test_pins["credit_dequeue"].v.value = 1;
+
+            if (test_pins["credit_out"].v.value != test_pins["sw_credit_out"].v.value)
+            {
+                myprintf ("Mismatched credit\n");
+            }
+
+            if (test_pins["credit_out_nexthop"].v.value != test_pins["sw_credit_out_nexthop"].v.value)
+            {
+                myprintf ("Mismatched credit nexthop\n");
+            }
+        }
+
+        // Generate credit for port 0 (TG)
+        if ((test_pins["flit_out_valid"].v.value == 1) && ((test_pins["nexthop_out"].v.value & 0x1c) == 0))
+        {
+            // Nexthop address has port 0, so it's for the TG
+
+            unsigned int nexthop = test_pins["nexthop_out"].v.value;
+            unsigned int credit = ((nexthop & 0x3)<<10) | (test_pins["tsim"].v.value & 0x3FF);
+            test_pins["credit_in_valid"].v.value = test_pins["credit_in_valid"].v.value | 0x1;
+            test_pins["credit_in"].v.arrayvalue[0] = credit;
+        }
+
+        // Read trace
+        while (tr_CLK == CLK)
+        {
+            fscanf (trace_fp, "%d", &tr_T);
+            test_pins["tsim"].v.value = tr_T;
+
+            fscanf (trace_fp, ": %s", buf);
+
+            if (strcmp (buf, "DT") == 0)
+            {
+                // sim_time tick
+
+                test_pins["tsim_tick"].v.value = 1;
+            }
+            else if (strcmp (buf, "iport") == 0)
+            {
+                // Router input
+
+                int port, vc;
+                int is_head, is_tail, is_measure;
+                unsigned int uaddr;
+                Flit f;
+
+                fscanf (trace_fp, "%d vc %d", &port, &vc);
+                fscanf (trace_fp, "%s", buf);
+
+                if (strcmp (buf, "flit") == 0)
+                {
+                    fscanf (trace_fp, " id %d H %d T %d M %d ts %d dest %d (haddr %d) src %d inj %d",
+                        &(f.data), &(is_head), &(is_tail), &(is_measure), &(f.timestamp), 
+                        &uaddr, &(f.addr3), &(f.source), &(f.injection_ts));
+
+                    f.is_head = (is_head == 1);
+                    f.is_tail = (is_tail == 1);
+                    f.measure = (is_measure == 1);
+
+                    unsigned flit_hi, flit_lo;
+                    form_flit (&f, &flit_hi, &flit_lo);
+                    
+                    int id = (port * NVCS) + vc;
+                    test_pins["flit_in_valid"].v.value = test_pins["flit_in_valid"].v.value | (1<<id);
+                    test_pins["flit_in"].v.arrayvalue[id*2] = flit_lo;
+                    test_pins["flit_in"].v.arrayvalue[id*2+1] = flit_hi;
+
+                    myprintf ("iport %d.%d flit   pid %6d %c %c ts %6d dest %3d src %3d inj %6d  %2x %08x\n",
+                        port, vc, f.data, (f.is_head ? 'H' : (f.is_tail ? 'T' : 'B')),
+                        (f.measure ? 'M' : ' '), f.timestamp, f.addr3, f.source, f.injection_ts,
+                        flit_hi, flit_lo);
+
+                }
+                else if (strcmp (buf, "credit") == 0)
+                {
+                    unsigned int ts;
+                    unsigned int credit;
+                    int pid;
+                    fscanf (trace_fp, " id %d ts %d\n", &pid, &ts);
+                    credit = ((vc & 0x3)<<10) | (ts & 0x3FF);
+
+                    test_pins["credit_in_valid"].v.value = test_pins["credit_in_valid"].v.value | (1<<port);
+                    test_pins["credit_in"].v.arrayvalue[port] = credit;
+
+                    myprintf ("iport %d.%d credit pid %6d     ts %6d  %03x\n", port, vc, pid, ts, credit);
+                }
+            }
+            else if (strcmp (buf, "credit") == 0)
+            {
+                // Credit output
+
+                int pid, ts;
+                DestTag nexthop;
+                unsigned int credit;
+                unsigned int uaddr;
+                unsigned int nexthop_haddr;
+
+                fscanf (trace_fp, " pid %d ts %d nexthop %d.%d:%d (haddr %d)", &pid, &ts, 
+                    &uaddr, &(nexthop.port), &(nexthop.VC), &(nexthop.addr2));
+
+                credit = ((nexthop.VC & 0x3)<<10) | (ts & 0x3FF);
+                nexthop_haddr = (nexthop.addr2 << 3) | (nexthop.port & 0x7);
+
+                test_pins["sw_credit_out"].v.value = credit;
+                test_pins["sw_credit_out_nexthop"].v.value = nexthop_haddr;
+
+                myprintf (" SW.credit_out %03x nexthop %03x ts %d VC %d pid %d\n", credit, nexthop_haddr, ts, nexthop.VC, pid);
+                
+            }
+            else if (strcmp (buf, "flit") == 0)
+            {
+                // Flit output
+
+                int is_head, is_tail, is_measure;
+                Flit f;
+                unsigned int uaddr, nexthop_uaddr;
+                unsigned int nexthop_haddr;
+
+                fscanf (trace_fp, " pid %d H %d T %d M %d ts %d dest %d (haddr %d) src %d inj %d nexthop %d.%d:%d (haddr %d)",
+                    &(f.data), &is_head, &is_tail, &is_measure, &(f.timestamp), &uaddr, &(f.addr3),
+                    &(f.source), &(f.injection_ts), &nexthop_uaddr, &(f.nexthop.port), &(f.nexthop.VC), &(f.nexthop.addr2));
+
+                f.is_head = (is_head == 1);
+                f.is_tail = (is_tail == 1);
+                f.measure = (is_measure == 1);
+
+                unsigned int flit_hi, flit_lo;
+                form_flit (&f, &flit_hi, &flit_lo);
+                nexthop_haddr = (f.nexthop.addr2 << 3) | (f.nexthop.port & 0x7);
+
+                test_pins["sw_flit_out"].v.arrayvalue[0] = flit_lo;
+                test_pins["sw_flit_out"].v.arrayvalue[1] = flit_hi;
+                test_pins["sw_nexthop_out"].v.value = nexthop_haddr;
+
+                myprintf (" SW.flit_out %2x %08x nexthop %03x pid %d\n", flit_hi, flit_lo, nexthop_haddr, f.data);
+            }
+
+            int result = fscanf (trace_fp, "%d", &tr_CLK);
+
+            if (result == EOF)
+            {
+                state = DONE;
+                fclose (trace_fp);
+                break;
+            }
+        }
+    }
+    return 0;
+}
+
+int test_cleanup ()
+{
+    for (map<string, test_signal>::iterator i = test_pins.begin(); i != test_pins.end(); i++)
+    {
+        free_test_signal (i->second);
+    }
+    return 0;
+}
+
+int test_done ()
+{
+    myprintf ("Test done!\n");
+#if C_TEST
+    return 4;
+#else
+    return 0;
+#endif
+}
+
+#if C_TEST
+int main (void)
+{
+    int reset;
+    int enable;
+    int tsim;
+    int tsim_tick;
+    int config_in_valid;
+    int config_in;
+    int flit_in;
+    int flit_in_valid;
+    int flit_ack;
+    int flit_out;
+    int flit_out_valid;
+    int nexthop_out;
+    int dequeue;
+    int credit_in;
+    int credit_in_valid;
+    int credit_ack;
+    int credit_out;
+    int credit_out_valid;
+    int credit_out_nexthop;
+    int credit_dequeue;
+
+    int result;
+
+    c_init ();
+
+    flit_ack = flit_out_valid = credit_ack = credit_out_valid = 0;
+
+    for (int clk = 0; clk < 10000; clk ++)
+    {
+        result = test (&reset, &enable, &tsim, &tsim_tick,
+            &config_in_valid, &config_in, &flit_in, &flit_in_valid,
+            flit_ack, &flit_out, flit_out_valid, &nexthop_out,
+            &dequeue, &credit_in, &credit_in_valid, credit_ack,
+            &credit_out, credit_out_valid, &credit_out_nexthop, &credit_dequeue);
+
+        if (result != 0)
+            break;
+    }
+}
+
+#endif
+

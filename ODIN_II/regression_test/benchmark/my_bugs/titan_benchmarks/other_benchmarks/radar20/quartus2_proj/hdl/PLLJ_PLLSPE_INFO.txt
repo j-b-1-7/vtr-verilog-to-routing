@@ -1,0 +1,5 @@
+PLL_Name	obj_q:obj_q|altclklock0_wrap:b2v_inst10|altclklock0:component1|altpll:altpll_component|altpll_bnf2:auto_generated|pll1
+PLLJITTER	29
+PLLSPEmax	40
+PLLSPEmin	-40
+

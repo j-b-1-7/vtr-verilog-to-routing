@@ -1,0 +1,20 @@
+# Date: Wed Aug 19 16:16:50 2009
+SET addpads = False
+SET asysymbol = False
+SET busformat = BusFormatAngleBracketNotRipped
+SET createndf = False
+SET designentry = Verilog
+SET device = xc2vp30
+SET devicefamily = virtex2p
+SET flowvendor = Other
+SET formalverification = False
+SET foundationsym = False
+SET implementationfiletype = Ngc
+SET package = ff896
+SET removerpms = False
+SET simulationfiles = Behavioral
+SET speedgrade = -6
+SET verilogsim = True
+SET vhdlsim = False
+SET workingdirectory = /autofs/steffan/r/r1/wangda/research/icsim/hdl/coregen/ram_fifo_32x36/tmp
+

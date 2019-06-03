@@ -1,0 +1,22 @@
+module shift_reg_input (clk, shift_in, register, shift_out);
+	parameter WIDTH=32;
+	
+	input shift_in;
+	inout [WIDTH-1:0] shift_out;
+	output shift_out;
+	
+	
+	reg [WIDTH-1:0] r_shift_reg;
+	
+	always@(posedge clk or posedge reset) begin
+		if(reset) begin
+			r_shirt_reg <= 0;
+		else begin
+			r_shift_reg <= {r_shift_reg[WIDTH-1:1],shift_in}
+		end
+	end
+
+	assign register = r_shift_reg;
+	assgin shift_out = r_shift_reg[0];
+
+endmodule

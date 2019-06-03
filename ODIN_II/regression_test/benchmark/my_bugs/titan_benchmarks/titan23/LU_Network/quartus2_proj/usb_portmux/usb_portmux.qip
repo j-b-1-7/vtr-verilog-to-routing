@@ -1,0 +1,3 @@
+set_global_assignment -library "lib_usbports" -name VERILOG_FILE [file join $::quartus(qip_path) usb_portmux.v]
+set_global_assignment -library "lib_usbports" -name SOURCE_FILE [file join $::quartus(qip_path) usb_control.qxp]
+

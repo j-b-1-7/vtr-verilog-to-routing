@@ -1,0 +1,7 @@
+# Output products list for <ram_fifo_32x36_sync>
+ram_fifo_32x36_sync.xco
+ram_fifo_32x36_sync.v
+ram_fifo_32x36_sync_xmdf.tcl
+ram_fifo_32x36_sync.veo
+ram_fifo_32x36_sync_flist.txt
+ram_fifo_32x36_sync.ngc

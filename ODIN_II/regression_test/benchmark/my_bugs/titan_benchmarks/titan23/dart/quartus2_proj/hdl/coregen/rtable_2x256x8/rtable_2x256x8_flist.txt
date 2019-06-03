@@ -1,0 +1,11 @@
+# Output products list for <rtable_2x256x8>
+rtable_2x256x8.xco
+rtable_2x256x8.vhd
+rtable_2x256x8.vho
+rtable_2x256x8.v
+rtable_2x256x8.veo
+rtable_2x256x8.asy
+rtable_2x256x8.sym
+rtable_2x256x8_xmdf.tcl
+rtable_2x256x8_flist.txt
+rtable_2x256x8.ngc

@@ -1,0 +1,20 @@
+v100
+----
+
+Uses on-chip memory, and is limited to doing one problem at a time.
+Resets state after doing each problem.
+
+
+v200
+----
+
+Uses DDR2 memory to store a whole set of max clique problem input matrices, 
+and processes the entire set before reporting max cliques. This version
+only has one work unit (max clique solver).
+
+
+v300
+----
+
+Contains many work units to parallelize the workload. Configured by default
+with 16.

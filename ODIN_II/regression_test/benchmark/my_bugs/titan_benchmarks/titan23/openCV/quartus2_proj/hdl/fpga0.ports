@@ -1,0 +1,8 @@
+# Name	direction	bits	Handshake_from_circuit	Handshake_from_SUN
+#delay	i	32
+command_data		i		64		command_wanted				command_ready
+feature_data		i		64 	feature_wanted 			feature_ready
+cascade_data		i		64 	cascade_wanted 			cascade_ready
+image_data			i		32 	image_wanted 				image_ready
+result_data			o		32		result_ready_to_return 	result_ready_to_accept
+stats_data			o		64		stats_ready_to_return 	stats_ready_to_accept

@@ -47,6 +47,15 @@ if(ODIN_DEBUG)
 
 endif()
 
+#
+# FIR Benchmarks http://kastner.ucsd.edu/fir-benchmarks/
+#
+add_custom_target(get-fir-benchmark
+    COMMAND ./vtr_flow/scripts/download_titan.py --vtr_flow_dir ./vtr_flow
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Downloading (~1GB) and extracting Titan benchmarks (~10GB) into VTR source tree.")
+
+
 #Flex and Bison are used to generate the parser
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)

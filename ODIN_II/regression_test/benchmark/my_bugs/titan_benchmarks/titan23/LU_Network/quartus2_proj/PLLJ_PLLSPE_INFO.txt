@@ -1,0 +1,10 @@
+PLL_Name	ddr:ddr_inst|ddr_0002:ddr_inst|ddr_pll0:pll0|altpll:upll_memphy|altpll_blj3:auto_generated|pll1
+PLLJITTER	25
+PLLSPEmax	40
+PLLSPEmin	-40
+
+PLL_Name	pll:the_pll_inst|altpll:altpll_component|pll_altpll:auto_generated|pll1
+PLLJITTER	37
+PLLSPEmax	40
+PLLSPEmin	-40
+

@@ -1,0 +1,15 @@
+SourcePartitions 8
+DestPartitions 8
+
+SwitchPorts 5
+NumVCs 2
+
+SP 0 DP 0 NumNodes 2
+SP 1 DP 1 NumNodes 1
+SP 2 DP 2 NumNodes 1
+SP 3 DP 3 NumNodes 1
+SP 4 DP 4 NumNodes 1
+SP 5 DP 5 NumNodes 1
+SP 6 DP 6 NumNodes 1
+SP 7 DP 7 NumNodes 1
+

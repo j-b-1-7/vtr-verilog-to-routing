@@ -1,0 +1,6 @@
+verilog work "../LFSR3_9.v"
+verilog work "../RAMFIFO_ctrl_lfsr.v"
+verilog work "../mux_Nto1.v"
+verilog work "../DualBRAM.v"
+verilog work "../decoder_N.v"
+verilog work "../PacketBuffer.v"

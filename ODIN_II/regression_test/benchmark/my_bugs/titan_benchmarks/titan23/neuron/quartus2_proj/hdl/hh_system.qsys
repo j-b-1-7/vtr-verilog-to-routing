@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<system name="$${FILENAME}">
+ <component
+   name="$${FILENAME}"
+   displayName="$${FILENAME}"
+   version="1.0"
+   description=""
+   tags=""
+   categories="System" />
+ <parameter name="bonusData"><![CDATA[bonusData 
+{
+   element $${FILENAME}
+   {
+   }
+   element clk_0
+   {
+      datum _sortIndex
+      {
+         value = "0";
+         type = "int";
+      }
+   }
+   element hh_core_0.ctrl_port
+   {
+      datum baseAddress
+      {
+         value = "80";
+         type = "long";
+      }
+   }
+   element hh_core_0
+   {
+      datum _sortIndex
+      {
+         value = "1";
+         type = "int";
+      }
+   }
+   element input_data.in
+   {
+      datum baseAddress
+      {
+         value = "72";
+         type = "long";
+      }
+   }
+   element output_data.in_csr
+   {
+      datum baseAddress
+      {
+         value = "32";
+         type = "long";
+      }
+   }
+   element input_data.in_csr
+   {
+      datum baseAddress
+      {
+         value = "0";
+         type = "long";
+      }
+   }
+   element input_data
+   {
+      datum _sortIndex
+      {
+         value = "2";
+         type = "int";
+      }
+   }
+   element output_data.out
+   {
+      datum baseAddress
+      {
+         value = "64";
+         type = "long";
+      }
+   }
+   element output_data
+   {
+      datum _sortIndex
+      {
+         value = "5";
+         type = "int";
+      }
+   }
+   element ports2avalon_0
+   {
+      datum _sortIndex
+      {
+         value = "6";
+         type = "int";
+      }
+   }
+   element timing_adapter
+   {
+      datum _sortIndex
+      {
+         value = "3";
+         type = "int";
+      }
+   }
+   element timing_adapter_1
+   {
+      datum _sortIndex
+      {
+         value = "4";
+         type = "int";
+      }
+   }
+}
+]]></parameter>
+ <parameter name="clockCrossingAdapter" value="HANDSHAKE" />
+ <parameter name="device" value="" />
+ <parameter name="deviceFamily" value="STRATIXIV" />
+ <parameter name="deviceSpeedGrade" value="" />
+ <parameter name="fabricMode" value="QSYS" />
+ <parameter name="generateLegacySim" value="false" />
+ <parameter name="generationId" value="0" />
+ <parameter name="globalResetBus" value="false" />
+ <parameter name="hdlLanguage" value="VERILOG" />
+ <parameter name="maxAdditionalLatency" value="1" />
+ <parameter name="projectName" value="DE4.qpf" />
+ <parameter name="sopcBorderPoints" value="false" />
+ <parameter name="systemHash" value="1" />
+ <parameter name="timeStamp" value="1334012417717" />
+ <parameter name="useTestBenchNamingPattern" value="false" />
+ <instanceScript></instanceScript>
+ <interface name="clk" internal="clk_0.clk_in" type="clock" dir="end" />
+ <interface name="reset" internal="clk_0.clk_in_reset" type="reset" dir="end" />
+ <interface
+   name="ports2avalon_0_usb"
+   internal="ports2avalon_0.usb"
+   type="conduit"
+   dir="end" />
+ <module kind="clock_source" version="11.1" enabled="1" name="clk_0">
+  <parameter name="clockFrequency" value="50000000" />
+  <parameter name="clockFrequencyKnown" value="true" />
+  <parameter name="inputClockFrequency" value="0" />
+  <parameter name="resetSynchronousEdges" value="NONE" />
+ </module>
+ <module kind="hh_core" version="1.0" enabled="1" name="hh_core_0">
+  <parameter name="AUTO_CLOCK_CLOCK_RATE" value="50000000" />
+ </module>
+ <module kind="ports2avalon" version="1.0" enabled="1" name="ports2avalon_0">
+  <parameter name="ADDRESS_WIDTH" value="32" />
+  <parameter name="AUTO_CLOCK_CLOCK_RATE" value="50000000" />
+ </module>
+ <module
+   kind="altera_avalon_fifo"
+   version="11.1"
+   enabled="1"
+   name="input_data">
+  <parameter name="avalonMMAvalonMMDataWidth" value="32" />
+  <parameter name="avalonMMAvalonSTDataWidth" value="32" />
+  <parameter name="bitsPerSymbol" value="32" />
+  <parameter name="channelWidth" value="0" />
+  <parameter name="deviceFamilyString" value="Stratix IV" />
+  <parameter name="errorWidth" value="0" />
+  <parameter name="fifoDepth" value="8192" />
+  <parameter name="fifoInputInterfaceOptions" value="AVALONMM_WRITE" />
+  <parameter name="fifoOutputInterfaceOptions" value="AVALONST_SOURCE" />
+  <parameter name="showHiddenFeatures" value="false" />
+  <parameter name="singleClockMode" value="true" />
+  <parameter name="singleResetMode" value="false" />
+  <parameter name="symbolsPerBeat" value="1" />
+  <parameter name="useBackpressure" value="true" />
+  <parameter name="useIRQ" value="false" />
+  <parameter name="usePacket" value="false" />
+  <parameter name="useReadControl" value="false" />
+  <parameter name="useRegister" value="false" />
+  <parameter name="useWriteControl" value="true" />
+ </module>
+ <module
+   kind="altera_avalon_fifo"
+   version="11.1"
+   enabled="1"
+   name="output_data">
+  <parameter name="avalonMMAvalonMMDataWidth" value="32" />
+  <parameter name="avalonMMAvalonSTDataWidth" value="32" />
+  <parameter name="bitsPerSymbol" value="32" />
+  <parameter name="channelWidth" value="0" />
+  <parameter name="deviceFamilyString" value="Stratix IV" />
+  <parameter name="errorWidth" value="0" />
+  <parameter name="fifoDepth" value="8192" />
+  <parameter name="fifoInputInterfaceOptions" value="AVALONST_SINK" />
+  <parameter name="fifoOutputInterfaceOptions" value="AVALONMM_READ" />
+  <parameter name="showHiddenFeatures" value="false" />
+  <parameter name="singleClockMode" value="true" />
+  <parameter name="singleResetMode" value="false" />
+  <parameter name="symbolsPerBeat" value="1" />
+  <parameter name="useBackpressure" value="true" />
+  <parameter name="useIRQ" value="true" />
+  <parameter name="usePacket" value="false" />
+  <parameter name="useReadControl" value="false" />
+  <parameter name="useRegister" value="false" />
+  <parameter name="useWriteControl" value="true" />
+ </module>
+ <module
+   kind="timing_adapter"
+   version="11.1"
+   enabled="1"
+   name="timing_adapter">
+  <parameter name="generationLanguage" value="VERILOG" />
+  <parameter name="inBitsPerSymbol" value="32" />
+  <parameter name="inChannelWidth" value="0" />
+  <parameter name="inErrorDescriptor" value="" />
+  <parameter name="inErrorWidth" value="0" />
+  <parameter name="inMaxChannel" value="0" />
+  <parameter name="inReadyLatency" value="0" />
+  <parameter name="inSymbolsPerBeat" value="1" />
+  <parameter name="inUseEmpty" value="false" />
+  <parameter name="inUseEmptyPort" value="NO" />
+  <parameter name="inUsePackets" value="false" />
+  <parameter name="inUseReady" value="true" />
+  <parameter name="inUseValid" value="true" />
+  <parameter name="moduleName" value="" />
+  <parameter name="outReadyLatency" value="1" />
+  <parameter name="outUseReady" value="true" />
+  <parameter name="outUseValid" value="true" />
+ </module>
+ <module
+   kind="timing_adapter"
+   version="11.1"
+   enabled="1"
+   name="timing_adapter_1">
+  <parameter name="generationLanguage" value="VERILOG" />
+  <parameter name="inBitsPerSymbol" value="32" />
+  <parameter name="inChannelWidth" value="0" />
+  <parameter name="inErrorDescriptor" value="" />
+  <parameter name="inErrorWidth" value="0" />
+  <parameter name="inMaxChannel" value="0" />
+  <parameter name="inReadyLatency" value="1" />
+  <parameter name="inSymbolsPerBeat" value="1" />
+  <parameter name="inUseEmpty" value="false" />
+  <parameter name="inUseEmptyPort" value="NO" />
+  <parameter name="inUsePackets" value="false" />
+  <parameter name="inUseReady" value="true" />
+  <parameter name="inUseValid" value="true" />
+  <parameter name="moduleName" value="" />
+  <parameter name="outReadyLatency" value="0" />
+  <parameter name="outUseReady" value="true" />
+  <parameter name="outUseValid" value="true" />
+ </module>
+ <connection kind="clock" version="11.1" start="clk_0.clk" end="hh_core_0.clock" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="hh_core_0.reset" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="clk_0.clk"
+   end="ports2avalon_0.clock" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="ports2avalon_0.reset" />
+ <connection kind="clock" version="11.1" start="clk_0.clk" end="input_data.clk_in" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="input_data.reset_in" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="clk_0.clk"
+   end="output_data.clk_in" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="output_data.reset_in" />
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon_0.master"
+   end="output_data.out">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0040" />
+ </connection>
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon_0.master"
+   end="input_data.in">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0048" />
+ </connection>
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon_0.master"
+   end="hh_core_0.ctrl_port">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0050" />
+ </connection>
+ <connection
+   kind="avalon_streaming"
+   version="11.1"
+   start="hh_core_0.outputdata_source"
+   end="timing_adapter.in" />
+ <connection
+   kind="avalon_streaming"
+   version="11.1"
+   start="timing_adapter.out"
+   end="output_data.in" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="clk_0.clk"
+   end="timing_adapter.clk" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="timing_adapter.reset" />
+ <connection
+   kind="avalon_streaming"
+   version="11.1"
+   start="input_data.out"
+   end="timing_adapter_1.in" />
+ <connection
+   kind="avalon_streaming"
+   version="11.1"
+   start="timing_adapter_1.out"
+   end="hh_core_0.inputdata_sink" />
+ <connection
+   kind="clock"
+   version="11.1"
+   start="clk_0.clk"
+   end="timing_adapter_1.clk" />
+ <connection
+   kind="reset"
+   version="11.1"
+   start="clk_0.clk_reset"
+   end="timing_adapter_1.reset" />
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon_0.master"
+   end="input_data.in_csr">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0000" />
+ </connection>
+ <connection
+   kind="avalon"
+   version="11.1"
+   start="ports2avalon_0.master"
+   end="output_data.in_csr">
+  <parameter name="arbitrationPriority" value="1" />
+  <parameter name="baseAddress" value="0x0020" />
+ </connection>
+</system>

@@ -1,0 +1,4 @@
+# Name	direction	bits	Handshake_from_circuit	Handshake_from_SUN
+i_address	i	32	o_address_want	i_address_ready
+i_writedata	i	32	o_writedata_want	i_writedata_ready
+o_readdata	o	32	o_readdata_ready	i_readdata_want

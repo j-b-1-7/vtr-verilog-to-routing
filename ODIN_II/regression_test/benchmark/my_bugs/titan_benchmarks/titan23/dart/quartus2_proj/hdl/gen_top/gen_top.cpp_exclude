@@ -1,0 +1,498 @@
+/* Generate the top level sim.v
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <map>
+#include <iostream>
+
+using namespace std;
+
+typedef struct s_pin
+{
+    //string name;        // Name of the pin
+    char direction;     // 'i' or 'o'
+    int width;          // Width of the signal
+    bool reg;           // TRUE if reg type
+} t_pin;
+
+typedef struct s_wire
+{
+    const char *prefix;
+    int width;
+    int dim2;           // second dimension
+} t_wire;
+
+#define IN 'i'
+#define OUT 'o'
+
+#define FLIT_WIDTH      36
+#define CREDIT_WIDTH    11
+#define TS_WIDTH        10
+#define A_WIDTH         11
+#define A_FQID          5
+
+void print_header (FILE *fp, map<const char*, t_pin> mod, const char* name);
+void print_vec_wires (FILE *fp, map<const char*, t_wire> &wires, int index, int vec_size);
+void print_wires (FILE *fp, map<const char*, t_wire> &wires);
+void print_sim (FILE *fp, int nsparts, int ndparts, int nnodes);
+
+int items_per_part (int nitems, int nparts, int partid)
+{
+    if (partid < nitems % nparts)
+        return (nitems / nparts + 1);
+    else
+        return (nitems / nparts);
+}
+
+int part_to_itemid (int nitems, int nparts, int partid, int itemid)
+{
+    int n = nitems / nparts;
+    if (partid < nitems % nparts)
+        return (partid * (n + 1) + itemid);
+    else
+        return (partid * n + itemid + (nitems % nparts));
+}
+
+t_wire new_wire (const char *prefix, int width, int dim2)
+{
+    t_wire wire;
+    wire.prefix = prefix;
+    wire.width = width;
+    wire.dim2 = dim2;
+    
+    return wire;
+}
+
+t_pin new_pin (char dir, int width, bool reg)
+{
+    t_pin pin;
+    pin.direction = dir;
+    pin.width = width;
+    pin.reg = reg;
+    
+    return pin;
+}
+
+
+/*
+ * Main
+ */
+int main (int argc, char *argv [])
+{
+    int nsparts, ndparts, nnodes;
+    char sim_name[20];
+    char sim_fname[20];
+    FILE *fp;
+    
+    // Constants
+	if (argc != 4)
+	{
+		cerr << "gen_top <nsparts> <ndparts> <nnodes>" << endl;
+		return 1;
+	}
+	
+    nsparts = atoi(argv[1]);
+    ndparts = atoi(argv[2]);
+    nnodes = atoi(argv[3]);
+
+    sprintf (sim_name, "sim%d_%dx%d", nnodes, nsparts, ndparts);
+    sprintf (sim_fname, "%s.v", sim_name);
+
+    // Output file
+    fp = fopen (sim_fname, "w");
+    
+    // Top-level module
+    map<const char*, t_pin> mod_sim;
+    mod_sim["clock"] = new_pin (IN, 1, false);
+    mod_sim["reset"] = new_pin (IN, 1, false);
+    mod_sim["enable"] = new_pin (IN, 1, false);
+    mod_sim["stop_injection"] = new_pin (IN, 1, false);
+    mod_sim["measure"] = new_pin (IN, 1, false);
+    mod_sim["sim_time"] = new_pin (OUT, TS_WIDTH, true);
+    mod_sim["sim_time_tick"] = new_pin (OUT, 1, false);
+    mod_sim["error"] = new_pin (OUT, 1, false);
+    mod_sim["quiescent"] = new_pin (OUT, 1, false);
+    mod_sim["config_in"] = new_pin (IN, 16, false);
+    mod_sim["config_in_valid"] = new_pin (IN, 1, false);
+    mod_sim["config_out"] = new_pin (OUT, 16, false);
+    mod_sim["config_out_valid"] = new_pin (OUT, 1, false);
+    mod_sim["stats_out"] = new_pin (OUT, 16, false);
+    mod_sim["stats_shift"] = new_pin (IN, 1, false);
+    
+    print_header (fp, mod_sim, sim_name);
+    print_sim (fp, nsparts, ndparts, nnodes);
+    
+    fclose (fp);
+    
+    return 0;
+}
+
+void print_header (FILE *fp, map<const char*, t_pin> mod, const char* name)
+{
+    int n = 0;
+    fprintf (fp, "module %s (\n", name);
+    
+    // Print the pin list (C style)
+    for (map<const char*, t_pin>::iterator i = mod.begin(); i != mod.end(); ++i)
+    {
+        if (i->second.direction == IN)
+        {
+            if (i->second.width > 1)
+                fprintf (fp, "    input [%d:0] %s", i->second.width-1, i->first);
+            else
+                fprintf (fp, "    input %s", i->first);
+        }
+        else
+        {
+            fprintf (fp, "    output ");
+            
+            if (i->second.reg)
+                fprintf (fp, "reg ");
+                
+            if (i->second.width > 1)
+                fprintf (fp, "[%d:0] %s", i->second.width-1, i->first);
+            else
+                fprintf (fp, "%s", i->first);
+        }
+        
+        n++;
+        
+        if (n != (int)mod.size())
+            fprintf (fp, ",\n");
+        else
+            fprintf (fp, "\n");
+    }
+    
+    fprintf (fp, ");\n\n");
+}
+
+void print_sim (FILE *fp, int nsparts, int ndparts, int nnodes)
+{
+    map<const char*, t_wire> wires;
+    
+    fprintf (fp, "    // Internal states\n");
+    fprintf (fp, "    reg tick_counter;\n\n");
+    
+    // Wires
+    wires["can_increment"] = new_wire ("", 1, 1);
+    wires["can_tick"] = new_wire ("", 1, 1);
+    
+    wires["part_error"] = new_wire ("", ndparts, 1);
+    wires["part_quiescent"] = new_wire ("", ndparts, 1);
+    wires["part_can_increment"] = new_wire ("", ndparts, 1);
+    
+    wires["part_config_in"] = new_wire ("", 16, ndparts+1);
+    wires["part_config_in_valid"] = new_wire ("", ndparts+1, 1);
+    wires["part_ram_config_in"] = new_wire ("", 16, ndparts+1);
+    wires["part_ram_config_in_valid"] = new_wire ("", ndparts+1, 1);
+    wires["part_stats_in"] = new_wire ("", 16, ndparts+1);
+    
+    wires["fdp_error"] = new_wire ("", ndparts, 1);
+    wires["fdp_select"] = new_wire ("", nsparts, ndparts);
+    wires["cdp_error"] = new_wire ("", ndparts, 1);
+    wires["cdp_select"] = new_wire ("", nsparts, ndparts);
+    
+    wires["fsp_select"] = new_wire ("", ndparts, nsparts);
+    wires["fsp_can_increment"] = new_wire ("", nsparts, 1);
+    wires["csp_select"] = new_wire ("", ndparts, nsparts);
+    wires["csp_can_increment"] = new_wire ("", nsparts, 1);
+    
+    wires["fsp_s1_nexthop"] = new_wire ("", nsparts*A_WIDTH, 1);
+    wires["fsp_s1_valid"] = new_wire ("", nsparts, 1);
+    wires["fsp_s1_valid_urgent"] = new_wire ("", nsparts, 1);
+    wires["fsp_s2_data"] = new_wire ("", nsparts*FLIT_WIDTH, 1);
+    wires["fsp_s2_nexthop"] = new_wire ("", nsparts*A_WIDTH, 1);
+    
+    wires["csp_s1_nexthop"] = new_wire ("", nsparts*A_WIDTH, 1);
+    wires["csp_s1_valid"] = new_wire ("", nsparts, 1);
+    wires["csp_s1_valid_urgent"] = new_wire ("", nsparts, 1);
+    wires["csp_s2_data"] = new_wire ("", nsparts*CREDIT_WIDTH, 1);
+    wires["csp_s2_nexthop"] = new_wire ("", nsparts*A_WIDTH, 1);
+    
+    print_wires (fp, wires);
+    fprintf (fp, "\n");
+    
+    // Output assignments
+    fprintf (fp, "    assign sim_time_tick = enable & can_increment & can_tick;\n"
+                  "    assign error = (|part_error) | (|fdp_error) | (|cdp_error);\n"
+                  "    assign quiescent = &part_quiescent;\n"
+                  "    assign can_increment = (&part_can_increment) & (&fsp_can_increment) & (&csp_can_increment);\n"
+                  "    assign config_out = part_config_in[%d];\n"
+                  "    assign config_out_valid = part_config_in_valid[%d];\n"
+                  "    assign stats_out = part_stats_in[%d];\n\n"
+                  "    assign part_config_in_valid[0] = config_in_valid;\n"
+                  "    assign part_config_in[0] = config_in;\n"
+                  "    assign part_ram_config_in_valid[0] = config_in_valid;\n"
+                  "    assign part_ram_config_in[0] = config_in;\n"
+                  "    assign part_stats_in[0] = 16'h0000;\n\n",
+                  ndparts, ndparts, ndparts);
+    fprintf (fp, "\n");
+    
+    // Simulation time counter
+    fprintf (fp, "    always @(posedge clock)\n"
+                 "    begin\n"
+                 "        if (reset)\n"
+                 "            sim_time <= 16'h0;\n"
+                 "        else if (sim_time_tick)\n"
+                 "            sim_time <= sim_time + 1;\n"
+                 "    end\n");
+
+    fprintf (fp, "    always @(posedge clock)\n"
+                 "    begin\n"
+                 "        if (reset)\n"
+                 "            tick_counter <= 1'b0;\n"
+                 "        else if (enable)\n"
+                 "        begin\n"
+                 "            if (sim_time_tick)\n"
+                 "                tick_counter <= 1'b0;\n"
+                 "            else if (~tick_counter)\n"
+                 "                tick_counter <= tick_counter + 1'b1;\n"
+                 "        end\n"
+                 "    end\n"
+                 "    assign can_tick = tick_counter;\n\n\n");
+                 
+    
+    //
+    // Partition instantiations
+    //
+    for (int d = 0; d < ndparts; d ++)
+    {
+        // Number of Nodes and SourceParts per DestPart
+        int n = items_per_part (nnodes, ndparts, d);
+        int nsp = items_per_part (nsparts, ndparts, d);
+        
+        printf ("DestPart %d # nodes %d # SourceParts %d\n", d, n, nsp);
+        
+        wires.clear ();
+        wires["vec_valid"] = new_wire ("fsp", 1, 1);
+        wires["vec_valid_urgent"] = new_wire ("fsp", 1, 1);
+        wires["vec_data"] = new_wire ("fsp", FLIT_WIDTH, 1);
+        wires["vec_nexthop"] = new_wire ("fsp", A_WIDTH, 1);
+        wires["vec_dequeue"] = new_wire ("fsp", 1, 1);
+        
+        print_vec_wires (fp, wires, d, n);
+        
+        wires.clear ();
+        wires["vec_valid"] = new_wire ("csp", 1, 1);
+        wires["vec_valid_urgent"] = new_wire ("csp", 1, 1);
+        wires["vec_data"] = new_wire ("csp", CREDIT_WIDTH, 1);
+        wires["vec_nexthop"] = new_wire ("csp", A_WIDTH, 1);
+        wires["vec_dequeue"] = new_wire ("csp", 1, 1);
+        
+        print_vec_wires (fp, wires, d, n);
+        
+        
+        wires.clear ();
+        wires["valid"] = new_wire ("fdp", 1, 1);
+        wires["data"] = new_wire ("fdp", FLIT_WIDTH, 1);
+        wires["nexthop"] = new_wire ("fdp", A_FQID, 1);
+        wires["ack"] = new_wire ("fdp", 1, 1);
+        
+        print_vec_wires (fp, wires, d, 1);
+        
+        wires.clear ();
+        wires["valid"] = new_wire ("cdp", 1, 1);
+        wires["data"] = new_wire ("cdp", CREDIT_WIDTH, 1);
+        wires["nexthop"] = new_wire ("cdp", A_FQID, 1);
+        wires["ack"] = new_wire ("cdp", 1, 1);
+        
+        print_vec_wires (fp, wires, d, 1);
+        fprintf (fp, "\n");
+        
+        // Partition instantiation
+        fprintf (fp, "    Partition #(.DPID(%d), .N(%d)) part_%d (\n", d, n, d);
+        fprintf (fp, "        .clock (clock),\n"
+                     "        .reset (reset),\n"
+                     "        .enable (enable),\n"
+                     "        .stop_injection (stop_injection),\n"
+                     "        .measure (measure),\n"
+                     "        .sim_time (sim_time),\n"
+                     "        .sim_time_tick (sim_time_tick),\n"
+                     "        .error (part_error[%d]),\n"
+                     "        .is_quiescent (part_quiescent[%d]),\n"
+                     "        .can_increment (part_can_increment[%d]),\n", d, d, d);
+        fprintf (fp, "        .config_in_valid (part_config_in_valid[%d]),\n"
+                     "        .config_in (part_config_in[%d]),\n"
+                     "        .config_out_valid (part_config_in_valid[%d]),\n"
+                     "        .config_out (part_config_in[%d]),\n", d, d, d+1, d+1);
+        fprintf (fp, "        .ram_config_in_valid (part_ram_config_in_valid[%d]),\n"
+                     "        .ram_config_in (part_ram_config_in[%d]),\n"
+                     "        .ram_config_out_valid (part_ram_config_in_valid[%d]),\n"
+                     "        .ram_config_out (part_ram_config_in[%d]),\n", d, d, d+1, d+1);
+        fprintf (fp, "        .stats_shift (stats_shift),\n"
+                     "        .stats_in (part_stats_in[%d]),\n"
+                     "        .stats_out (part_stats_in[%d]),\n", d, d+1);
+        
+        fprintf (fp, "        .fsp_vec_valid (fsp_%d_vec_valid),\n"
+                     "        .fsp_vec_valid_urgent (fsp_%d_vec_valid_urgent),\n"
+                     "        .fsp_vec_data (fsp_%d_vec_data),\n"
+                     "        .fsp_vec_nexthop (fsp_%d_vec_nexthop),\n"
+                     "        .fsp_vec_dequeue (fsp_%d_vec_dequeue),\n"
+                     "        .csp_vec_valid (csp_%d_vec_valid),\n"
+                     "        .csp_vec_valid_urgent (csp_%d_vec_valid_urgent),\n"
+                     "        .csp_vec_data (csp_%d_vec_data),\n"
+                     "        .csp_vec_nexthop (csp_%d_vec_nexthop),\n"
+                     "        .csp_vec_dequeue (csp_%d_vec_dequeue),\n",
+                     d, d, d, d, d, d, d, d, d, d);
+                     
+        fprintf (fp, "        .fdp_valid (fdp_%d_valid),\n"
+                     "        .fdp_data (fdp_%d_data),\n"
+                     "        .fdp_nexthop (fdp_%d_nexthop),\n"
+                     "        .fdp_ack (fdp_%d_ack),\n"
+                     "        .cdp_valid (cdp_%d_valid),\n"
+                     "        .cdp_data (cdp_%d_data),\n"
+                     "        .cdp_nexthop (cdp_%d_nexthop),\n"
+                     "        .cdp_ack (cdp_%d_ack)\n"
+                     "    );\n\n",
+                     d, d, d, d, d, d, d, d);
+
+        // DestPart
+        fprintf (fp, "    ICDestPart #(.PID(%d), .NSP(%d), .WIDTH(%d)) fdp_%d (\n",
+            d, nsparts, FLIT_WIDTH, d);
+        fprintf (fp, "        .clock (clock),\n"
+                     "        .reset (reset),\n"
+                     "        .enable (enable),\n"
+                     "        .error (fdp_error[%d]),\n", d);
+        fprintf (fp, "        .src_s1_valid (fsp_s1_valid),\n"
+                     "        .src_s1_valid_urgent (fsp_s1_valid_urgent),\n"
+                     "        .src_s1_nexthop_in (fsp_s1_nexthop),\n"
+                     "        .src_s1_part_sel (fdp_select[%d]),\n", d);
+        fprintf (fp, "        .src_s2_data_in (fsp_s2_data),\n"
+                     "        .src_s2_nexthop_in (fsp_s2_nexthop),\n"
+                     "        .dequeue (fdp_%d_ack),\n"
+                     "        .s3_data_out (fdp_%d_data),\n"
+                     "        .s3_nexthop_out (fdp_%d_nexthop),\n"
+                     "        .s3_data_valid (fdp_%d_valid)\n"
+                     "    );\n\n", d, d, d, d);
+        
+        fprintf (fp, "    ICDestPart #(.PID(%d), .NSP(%d), .WIDTH(%d)) cdp_%d (\n",
+            d, nsparts, CREDIT_WIDTH, d);
+        fprintf (fp, "        .clock (clock),\n"
+                     "        .reset (reset),\n"
+                     "        .enable (enable),\n"
+                     "        .error (cdp_error[%d]),\n", d);
+        fprintf (fp, "        .src_s1_valid (csp_s1_valid),\n"
+                     "        .src_s1_valid_urgent (csp_s1_valid_urgent),\n"
+                     "        .src_s1_nexthop_in (csp_s1_nexthop),\n"
+                     "        .src_s1_part_sel (cdp_select[%d]),\n", d);
+        fprintf (fp, "        .src_s2_data_in (csp_s2_data),\n"
+                     "        .src_s2_nexthop_in (csp_s2_nexthop),\n"
+                     "        .dequeue (cdp_%d_ack),\n"
+                     "        .s3_data_out (cdp_%d_data),\n"
+                     "        .s3_nexthop_out (cdp_%d_nexthop),\n"
+                     "        .s3_data_valid (cdp_%d_valid)\n"
+                     "    );\n\n", d, d, d, d);
+        
+        // Source Partitions
+        for (int s = 0; s < nsp; s ++)
+        {
+            int nnodes = items_per_part (n, nsp, s);
+            int spid = part_to_itemid (nsparts, ndparts, d, s);
+            int nid_min = part_to_itemid (n, nsp, s, 0);
+            int nid_max = part_to_itemid (n, nsp, s, nnodes-1);
+            
+            printf ("DestPart %d s %d spid %d\n", d, s, spid);
+            
+            fprintf (fp, "    ICSourcePart #(.N(%d), .WIDTH(%d)) fsp_%d (\n",
+                nnodes, FLIT_WIDTH, spid);
+            fprintf (fp, "        .clock (clock),\n"
+                         "        .reset (reset),\n"
+                         "        .enable (enable),\n"
+                         "        .select (|fsp_select[%d]),\n"
+                         "        .can_increment (fsp_can_increment[%d]),\n", spid, spid);
+            fprintf (fp, "        .src_data_valid (fsp_%d_vec_valid[%d:%d]),\n"
+                         "        .src_data_valid_urgent (fsp_%d_vec_valid_urgent[%d:%d]),\n"
+                         "        .src_data_in (fsp_%d_vec_data[%d:%d]),\n"
+                         "        .src_nexthop_in (fsp_%d_vec_nexthop[%d:%d]),\n"
+                         "        .src_dequeue (fsp_%d_vec_dequeue[%d:%d]),\n",
+                         d, nid_max, nid_min,
+                         d, nid_max, nid_min,
+                         d, (nid_max+1)*FLIT_WIDTH-1, nid_min*FLIT_WIDTH,
+                         d, (nid_max+1)*A_WIDTH-1, nid_min*A_WIDTH,
+                         d, nid_max, nid_min);
+            fprintf (fp, "        .s1_nexthop_out (fsp_s1_nexthop[%d:%d]),\n"
+                         "        .s1_valid (fsp_s1_valid[%d]),\n"
+                         "        .s1_valid_urgent (fsp_s1_valid_urgent[%d]),\n"
+                         "        .s2_data_out (fsp_s2_data[%d:%d]),\n"
+                         "        .s2_nexthop_out (fsp_s2_nexthop[%d:%d])\n"
+                         "    );\n\n",
+                         (spid+1)*A_WIDTH-1, spid*A_WIDTH,
+                         spid, spid,
+                         (spid+1)*FLIT_WIDTH-1, spid*FLIT_WIDTH,
+                         (spid+1)*A_WIDTH-1, spid*A_WIDTH);
+            
+            fprintf (fp, "    ICSourcePart #(.N(%d), .WIDTH(%d)) csp_%d (\n",
+                nnodes, CREDIT_WIDTH, spid);
+            fprintf (fp, "        .clock (clock),\n"
+                         "        .reset (reset),\n"
+                         "        .enable (enable),\n"
+                         "        .select (|csp_select[%d]),\n"
+                         "        .can_increment (csp_can_increment[%d]),\n", spid, spid);
+            fprintf (fp, "        .src_data_valid (csp_%d_vec_valid[%d:%d]),\n"
+                         "        .src_data_valid_urgent (csp_%d_vec_valid_urgent[%d:%d]),\n"
+                         "        .src_data_in (csp_%d_vec_data[%d:%d]),\n"
+                         "        .src_nexthop_in (csp_%d_vec_nexthop[%d:%d]),\n"
+                         "        .src_dequeue (csp_%d_vec_dequeue[%d:%d]),\n",
+                         d, nid_max, nid_min,
+                         d, nid_max, nid_min,
+                         d, (nid_max+1)*CREDIT_WIDTH-1, nid_min*CREDIT_WIDTH,
+                         d, (nid_max+1)*A_WIDTH-1, nid_min*A_WIDTH,
+                         d, nid_max, nid_min);
+            fprintf (fp, "        .s1_nexthop_out (csp_s1_nexthop[%d:%d]),\n"
+                         "        .s1_valid (csp_s1_valid[%d]),\n"
+                         "        .s1_valid_urgent (csp_s1_valid_urgent[%d]),\n"
+                         "        .s2_data_out (csp_s2_data[%d:%d]),\n"
+                         "        .s2_nexthop_out (csp_s2_nexthop[%d:%d])\n"
+                         "    );\n\n",
+                         (spid+1)*A_WIDTH-1, spid*A_WIDTH,
+                         spid, spid,
+                         (spid+1)*CREDIT_WIDTH-1, spid*CREDIT_WIDTH,
+                         (spid+1)*A_WIDTH-1, spid*A_WIDTH);
+        }
+    }
+    
+    // Unscramble bits
+    fprintf (fp, "    genvar i, j;\n"
+                 "    generate\n"
+                 "        for (j = 0; j < %d; j = j + 1)\n"
+                 "        begin : dp_sp_sel\n"
+                 "            for (i = 0; i < %d; i = i + 1)\n"
+                 "            begin: dp\n"
+                 "                assign fsp_select[j][i] = fdp_select[i][j];\n"
+                 "                assign csp_select[j][i] = cdp_select[i][j];\n"
+                 "            end\n"
+                 "        end\n"
+                 "    endgenerate\n\n",
+                 nsparts, ndparts);
+    
+    fprintf (fp, "endmodule\n\n");
+}
+
+void print_vec_wires (FILE *fp, map<const char*, t_wire> &wires, int index, int vec_size)
+{
+    for (map<const char*, t_wire>::iterator i = wires.begin(); i != wires.end(); ++i)
+    {
+        fprintf (fp, "    wire [%d:0] %s_%d_%s",
+            (vec_size*i->second.width)-1, i->second.prefix, index, i->first);
+        
+        if (i->second.dim2 > 1)
+            fprintf (fp, " [%d:0];\n", i->second.dim2-1);
+        else
+            fprintf (fp, ";\n");
+    }
+}
+
+void print_wires (FILE *fp, map<const char*, t_wire> &wires)
+{
+    for (map<const char*, t_wire>::iterator i = wires.begin(); i != wires.end(); ++i)
+    {
+        fprintf (fp, "    wire [%d:0] %s", i->second.width-1, i->first);
+        
+        if (i->second.dim2 > 1)
+            fprintf (fp, " [%d:0];\n", i->second.dim2-1);
+        else
+            fprintf (fp, ";\n");
+    }
+}
+

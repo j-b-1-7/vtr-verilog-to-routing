@@ -1,0 +1,28 @@
+<internal_error>
+<sub_system>ERR</sub_system>
+<callstack>
+	 0xf1f71df3: ccl_err + 0xadf3 (_ZN15ERR_STACKWALKER15get_stack_traceEPPKviiPv + 0x8f)
+	 0xf1f74706: ccl_err + 0xd706 (_Z14err_terminatorv + 0x62)
+	 0xef8f7a0e: dinkum_alt + 0x17a0e (_ZSt9terminatev + 0x1e)
+	 0xee9abb98: stdc++.so.6 + 0xb4b98 (__cxa_rethrow + 0x58)
+	 0xf132387e: QtCore.so.4 + 0x17887e (_ZN10QEventLoop4execE6QFlagsINS_17ProcessEventsFlagEE + 0x18e)
+	 0xf1325811: QtCore.so.4 + 0x17a811 (_ZN16QCoreApplication4execEv + 0xb1)
+	 0xf15a7317: QtGui.so.4 + 0x148317 (_ZN12QApplication4execEv + 0x27)
+	  0x804e4cd: quartus + 0x64cd (_Z8qgq_mainiPPKc + 0x9b)
+	 0xf25d1b58: ccl_msg + 0x1fb58 (_Z15msg_main_threadPv + 0x18)
+	 0xf1f2eb58: ccl_thr + 0x5b58 (thr_final_wrapper + 0xe)
+	 0xf25d3c42: ccl_msg + 0x21c42 (_Z18msg_thread_wrapperPFPvS_ES_ + 0x72)
+	  0x8066841: quartus + 0x1e841 (_Z18mem_thread_wrapperPFPvS_ES_ + 0xd1)
+	 0xf1f70b30: ccl_err + 0x9b30 (_Z18err_thread_wrapperPFPvS_ES_ + 0x2a)
+	 0xf1f2eb8b: ccl_thr + 0x5b8b (thr_thread_wrapper + 0x2f)
+	 0xf25e5d01: ccl_msg + 0x33d01 (_Z12msg_exe_mainiPPKcPFiiS1_E + 0xb7)
+	  0x804e41b: quartus + 0x641b (main + 0x4f)
+	 0xee7334d3: c.so.6 + 0x194d3 (__libc_start_main + 0xf3)
+	 0xf77a7ff4: ld-linux.so.2 + 0x20ff4
+	 0xec830018:
+</callstack>
+<error>*** Fatal Error: Unhandled Exception</error>
+<date>Mon Jul  9 06:06:34 2012
+</date>
+<version>Version 12.0 Build 178 05/31/2012 SJ Full Version</version>
+</internal_error>

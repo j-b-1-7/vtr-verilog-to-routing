@@ -1,0 +1,12 @@
+# Output products list for <fifo_8bit>
+fifo_8bit.asy
+fifo_8bit.ngc
+fifo_8bit.sym
+fifo_8bit.v
+fifo_8bit.veo
+fifo_8bit.vhd
+fifo_8bit.vho
+fifo_8bit.xco
+fifo_8bit_fifo_generator_v4_4_xst_1.ngc_xst.xrpt
+fifo_8bit_flist.txt
+fifo_8bit_xmdf.tcl

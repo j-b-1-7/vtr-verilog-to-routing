@@ -1,0 +1,25 @@
+//Replacement for Xilinx corgen fifo_16
+module fifo_16(
+		input clk,
+		input rst,
+		input [8:0] din,
+		input wr_en,
+		input rd_en,
+		output [9:0] dout,
+		output full,
+		output empty,
+		output valid);
+
+	alt_fifo	alt_fifo_inst (
+		.clock ( clk ),
+		.data ( din ),
+		.rdreq ( rd_en ),
+		.sclr ( rst ),
+		.wrreq ( wr_en ),
+		.empty ( empty ),
+		.full ( full ),
+		.q ( dout ),
+		.usedw ()
+		);
+
+endmodule

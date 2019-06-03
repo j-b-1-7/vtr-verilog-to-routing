@@ -1,0 +1,7 @@
+# Output products list for <shift_reg_32x16>
+shift_reg_32x16.xco
+shift_reg_32x16.v
+shift_reg_32x16_xmdf.tcl
+shift_reg_32x16_flist.txt
+shift_reg_32x16.veo
+shift_reg_32x16.ngc

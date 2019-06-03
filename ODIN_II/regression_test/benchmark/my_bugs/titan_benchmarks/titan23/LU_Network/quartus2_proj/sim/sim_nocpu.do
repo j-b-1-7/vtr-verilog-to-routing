@@ -1,0 +1,1 @@
+vsim {-voptargs=+acc=bcgnpr+lu_new_top+ctrl_top.+memnode_top. +acc=+tb -L altera_mf_ver -L altera_ver -L lpm_ver -L sgate_ver -L stratixiv_ver} tb

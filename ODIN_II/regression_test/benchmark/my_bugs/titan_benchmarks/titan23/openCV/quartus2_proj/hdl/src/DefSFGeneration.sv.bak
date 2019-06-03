@@ -1,0 +1,32 @@
+/******************** sfGeneration *********************/
+
+/***** package *****/
+package pkg_sfGeneration;
+	
+	import globalDefinitions::*;
+	
+	// ---- public params ---- //
+	
+    
+	// ---- private params ---- //
+  
+	// integral counter sizes
+	parameter int IMAGE_Y_COUNTER_WIDTH = pkg_imageCache::colBits;
+	parameter int IMAGE_X_COUNTER_WIDTH = pkg_imageCache::rowBits;
+   parameter int IMAGE_DATA_WIDTH = pkg_imageCache::depth;
+	
+	// ---- local enums ---- //
+  
+	// define state names	
+	typedef enum logic [3:0] {
+		S_Reset, 
+		S_Ready,
+		S_CalcSF,
+		S_StartImageRead,
+		S_Index,	
+		S_EmptyPipeline	
+		S_Done } STATES_t; 
+              
+endpackage
+
+
