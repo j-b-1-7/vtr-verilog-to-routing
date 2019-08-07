@@ -345,9 +345,24 @@ void look_for_clocks(netlist_t *netlist)
 
 	for (i = 0; i < netlist->num_ff_nodes; i++)
 	{
-		if (netlist->ff_nodes[i]->input_pins[1]->net->driver_pin->node->type != CLOCK_NODE)
+		oassert(netlist->ff_nodes);
+		oassert(netlist->ff_nodes[i]);
+		oassert(netlist->ff_nodes[i]->input_pins);
+		oassert(netlist->ff_nodes[i]->input_pins[1]);
+		oassert(netlist->ff_nodes[i]->input_pins[1]->net);
+
+		nnet_t *clk_net = netlist->ff_nodes[i]->input_pins[1]->net;
+
+		if(	clk_net != netlist->one_net
+		&&	clk_net != netlist->zero_net
+		&&	clk_net != netlist->pad_net )
 		{
-			netlist->ff_nodes[i]->input_pins[1]->net->driver_pin->node->type = CLOCK_NODE;
+			if(	clk_net->driver_pin
+			&& clk_net->driver_pin->node
+			&& clk_net->driver_pin->node->type != CLOCK_NODE)
+			{
+				clk_net->driver_pin->node->type = CLOCK_NODE;
+			}
 		}
 	}
 }
@@ -1676,6 +1691,61 @@ nnet_t* define_nodes_and_nets_with_driver(ast_node_t* var_declare, char *instanc
 	return new_net;
 }
 
+static void convert_2D_to_1D_array(ast_node_t **var_declare, STRING_CACHE_LIST *local_string_cache_list)
+{
+	ast_node_t *node_max2  = reduce_expressions((*var_declare)->children[3], (*var_declare), local_string_cache_list, NULL, 0, true);
+	ast_node_t *node_min2  = reduce_expressions((*var_declare)->children[4], (*var_declare), local_string_cache_list, NULL, 0, true);
+
+	ast_node_t *node_max3  = reduce_expressions((*var_declare)->children[5], (*var_declare), local_string_cache_list, NULL, 0, true);
+	ast_node_t *node_min3  = reduce_expressions((*var_declare)->children[6], (*var_declare), local_string_cache_list, NULL, 0, true);
+
+	oassert(node_min2->type == NUMBERS && node_max2->type == NUMBERS);		
+	oassert(node_min3->type == NUMBERS && node_max3->type == NUMBERS);
+
+	long addr_min = node_min2->types.vnumber->get_value();
+	long addr_max = node_max2->types.vnumber->get_value();
+
+	long addr_min1= node_min3->types.vnumber->get_value();
+	long addr_max1= node_max3->types.vnumber->get_value();
+
+	if((addr_min > addr_max) || (addr_min1 > addr_max1))
+	{
+		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number, "%s",
+				"Odin doesn't support arrays declared [m:n] where m is less than n.");
+	}	
+	else if((addr_min < 0 || addr_max < 0) || (addr_min1 < 0 || addr_max1 < 0))
+	{
+		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number, "%s",
+				"Odin doesn't support negative number in index.");
+	}
+
+	char *name = (*var_declare)->children[0]->types.identifier;
+
+	if (addr_min != 0 || addr_min1 != 0)
+	{
+		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number,
+				"%s: right memory address index must be zero\n", name);
+	}
+	
+	long addr_chunk_size = (addr_max1 - addr_min1 + 1);
+
+	(*var_declare)->chunk_size = addr_chunk_size;
+
+	long new_address_max = (addr_max - addr_min + 1)*addr_chunk_size -1;
+
+	change_to_number_node((*var_declare)->children[3], new_address_max);
+	change_to_number_node((*var_declare)->children[4], 0);
+
+	(*var_declare)->children[5] = free_whole_tree((*var_declare)->children[5]);
+	(*var_declare)->children[6] = free_whole_tree((*var_declare)->children[6]);
+
+	(*var_declare)->children[5] = (*var_declare)->children[7];
+	(*var_declare)->children[7] = NULL; 
+
+	(*var_declare)->num_children -= 2;
+
+}
+
 /*---------------------------------------------------------------------------------------------
  * (function: create_symbol_table_for_module)
  * 	Creates a lookup of the variables declared here so that in the analysis we can look
@@ -1708,98 +1778,111 @@ void create_symbol_table_for_module(ast_node_t* module_items, STRING_CACHE_LIST 
 				{
 					ast_node_t *var_declare = module_items->children[i]->children[j];
 
-					/* parameters are already dealt with */
-					if (var_declare->types.variable.is_parameter
-						|| var_declare->types.variable.is_localparam)
-						
-						continue;
+					oassert(var_declare->type == VAR_DECLARE);
 
-					oassert(module_items->children[i]->children[j]->type == VAR_DECLARE);
-					oassert(	(var_declare->types.variable.is_input) ||
+					if ((var_declare->types.variable.is_input) ||
 						(var_declare->types.variable.is_output) ||
 						(var_declare->types.variable.is_reg) ||
 						(var_declare->types.variable.is_integer) ||
 						(var_declare->types.variable.is_genvar) ||
-						(var_declare->types.variable.is_wire));
-
-					if (var_declare->types.variable.is_input 
-						&& var_declare->types.variable.is_reg)
-						{
-							error_message(NETLIST_ERROR, var_declare->line_number, var_declare->file_number, "%s",
-									"Input cannot be defined as a reg\n");
-						}
-
-					/* make the string to add to the string cache */
-					temp_string = make_full_ref_name(NULL, NULL, NULL, var_declare->children[0]->types.identifier, -1);
-					/* look for that element */
-					sc_spot = sc_add_string(local_symbol_table_sc, temp_string);
-					if (local_symbol_table_sc->data[sc_spot] != NULL)
+						(var_declare->types.variable.is_wire) )
 					{
-						/* ERROR checks here
-						 * output with reg is fine
-						 * output with wire is fine
-						 * input with wire is fine
-						 * Then update the stored string cache entry with information */
-						if (var_declare->types.variable.is_input
-							&& ((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_reg)
-						{
-							error_message(NETLIST_ERROR, var_declare->line_number, var_declare->file_number, "%s",
-									"Input cannot be defined as a reg\n");
-						}
-						/* MORE ERRORS ... could check for same declaration name ... */
-						else if (var_declare->types.variable.is_output)
-						{
-							/* copy all the reg and wire info over */
-							((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_output = true;
+						if (var_declare->types.variable.is_input 
+							&& var_declare->types.variable.is_reg)
+							{
+								error_message(NETLIST_ERROR, var_declare->line_number, var_declare->file_number, "%s",
+										"Input cannot be defined as a reg\n");
+							}
 
-							/* check for an initial value and copy it over if found */
-							long initial_value;
-							if(check_for_initial_reg_value(var_declare, &initial_value)){
-								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
-								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
+						/* make the string to add to the string cache */
+						temp_string = make_full_ref_name(NULL, NULL, NULL, var_declare->children[0]->types.identifier, -1);
+						/* look for that element */
+						sc_spot = sc_add_string(local_symbol_table_sc, temp_string);
+						if (local_symbol_table_sc->data[sc_spot] != NULL)
+						{
+							/* ERROR checks here
+							* output with reg is fine
+							* output with wire is fine
+							* input with wire is fine
+							* Then update the stored string cache entry with information */
+							if (var_declare->types.variable.is_input
+								&& ((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_reg)
+							{
+								error_message(NETLIST_ERROR, var_declare->line_number, var_declare->file_number, "%s",
+										"Input cannot be defined as a reg\n");
+							}
+							/* MORE ERRORS ... could check for same declaration name ... */
+							else if (var_declare->types.variable.is_output)
+							{
+								/* copy all the reg and wire info over */
+								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_output = true;
+
+								/* check for an initial value and copy it over if found */
+								long initial_value;
+								if(check_for_initial_reg_value(var_declare, &initial_value)){
+									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
+									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
+								}
+							}
+							else if ((var_declare->types.variable.is_reg) || (var_declare->types.variable.is_wire) 
+									|| (var_declare->types.variable.is_integer) || (var_declare->types.variable.is_genvar))
+							{
+								/* copy the output status over */
+								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_wire = var_declare->types.variable.is_wire;
+								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_reg = var_declare->types.variable.is_reg;
+
+								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_integer = var_declare->types.variable.is_integer;
+								/* check for an initial value and copy it over if found */
+								long initial_value;
+								if(check_for_initial_reg_value(var_declare, &initial_value)){
+									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
+									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
+								}
+							}
+							else if (!var_declare->types.variable.is_integer)
+							{
+								abort();
 							}
 						}
-						else if ((var_declare->types.variable.is_reg) || (var_declare->types.variable.is_wire) 
-								|| (var_declare->types.variable.is_integer) || (var_declare->types.variable.is_genvar))
+						else
 						{
-							/* copy the output status over */
-							((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_wire = var_declare->types.variable.is_wire;
-							((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_reg = var_declare->types.variable.is_reg;
+							ast_node_t *stored_var_declare = var_declare;
 
-							((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_integer = var_declare->types.variable.is_integer;
-							/* check for an initial value and copy it over if found */
+							/* store the data which is an idx here */
+							local_symbol_table_sc->data[sc_spot] = (void *)stored_var_declare;
+
+							/* store the symbol */
+							local_symbol_table = (ast_node_t **)vtr::realloc(local_symbol_table, sizeof(ast_node_t*)*(num_local_symbol_table+1));
+							local_symbol_table[num_local_symbol_table] = (ast_node_t *)stored_var_declare;
+							num_local_symbol_table ++;
+
+							/* check for an initial value and store it if found */
 							long initial_value;
-							if(check_for_initial_reg_value(var_declare, &initial_value)){
-								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
-								((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
+							if(check_for_initial_reg_value(stored_var_declare, &initial_value)){
+								stored_var_declare->types.variable.is_initialized = true;
+								stored_var_declare->types.variable.initial_value = initial_value;
 							}
 						}
-						else if (!var_declare->types.variable.is_integer)
+
+						oassert(local_symbol_table_sc->data[sc_spot]);
+
+						ast_node_t *temp = (ast_node_t *)local_symbol_table_sc->data[sc_spot];
+						// pack 2d array into 1d
+						if (temp->num_children == 8 
+						&& temp->children[5] 
+						&& temp->children[6])
 						{
-							abort();
+							convert_2D_to_1D_array((ast_node_t **)(&(local_symbol_table_sc->data[sc_spot])), local_string_cache_list);
 						}
+
+						vtr::free(temp_string);
+
+						module_items->children[i]->children[j] = NULL;
 					}
-					else
-					{
-						ast_node_t *stored_var_declare = ast_node_deep_copy(var_declare);
-
-						/* store the data which is an idx here */
-						local_symbol_table_sc->data[sc_spot] = (void *)stored_var_declare;
-
-						/* store the symbol */
-						local_symbol_table = (ast_node_t **)vtr::realloc(local_symbol_table, sizeof(ast_node_t*)*(num_local_symbol_table+1));
-						local_symbol_table[num_local_symbol_table] = (ast_node_t *)stored_var_declare;
-						num_local_symbol_table ++;
-
-						/* check for an initial value and store it if found */
-						long initial_value;
-						if(check_for_initial_reg_value(stored_var_declare, &initial_value)){
-							stored_var_declare->types.variable.is_initialized = true;
-							stored_var_declare->types.variable.initial_value = initial_value;
-						}
-					}
-					vtr::free(temp_string);
 				}
+				remove_child_from_node_at_index(module_items, i);
+				i--;
+
 			}
 			else if(module_items->children[i]->type == ASSIGN)
 			{

@@ -102,7 +102,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 // bool check_mult_bracket(std::vector<int> list);
 
 void update_string_caches(STRING_CACHE_LIST *local_string_cache_list);
-void convert_2D_to_1D_array(ast_node_t **var_declare, STRING_CACHE_LIST *local_string_cache_list);
 void convert_2D_to_1D_array_ref(ast_node_t **node, STRING_CACHE_LIST *local_string_cache_list);
 ast_node_t *get_chunk_size_node(char *instance_name_prefix, char *array_name, STRING_CACHE_LIST *local_string_cache_list);
 bool verify_terminal(ast_node_t *top, ast_node_t *iterator);
@@ -591,14 +590,6 @@ ast_node_t *reduce_expressions(ast_node_t *node, ast_node_t *parent, STRING_CACH
 			}
 			case VAR_DECLARE:
 			{
-				// pack 2d array into 1d
-				if (node->num_children == 8 
-				&& node->children[5] 
-				&& node->children[6])
-				{
-					convert_2D_to_1D_array(&node, local_string_cache_list);
-				}
-				
 				break;
 			}
 			case FOR:
@@ -848,7 +839,11 @@ ast_node_t *reduce_expressions(ast_node_t *node, ast_node_t *parent, STRING_CACH
 					((ast_node_t *)local_symbol_table_sc->data[sc_spot])->types.variable.is_memory = true;
 				}
 
-				if (node->num_children == 3) convert_2D_to_1D_array_ref(&node, local_string_cache_list);
+				if (node->num_children == 3) 
+				{
+					convert_2D_to_1D_array_ref(&node, local_string_cache_list);
+				}
+
 				break;
 			}
 			case ALWAYS: // fallthrough
@@ -890,90 +885,6 @@ void update_string_caches(STRING_CACHE_LIST *local_string_cache_list)
 	}
 }
 
-void convert_2D_to_1D_array(ast_node_t **var_declare, STRING_CACHE_LIST *local_string_cache_list)
-{
-	char *instance_name_prefix = local_string_cache_list->instance_name_prefix;
-
-	STRING_CACHE *local_symbol_table_sc = local_string_cache_list->local_symbol_table_sc;
-	ast_node_t **local_symbol_table = local_string_cache_list->local_symbol_table;
-	int num_local_symbol_table = local_string_cache_list->num_local_symbol_table;
-
-	ast_node_t *node_max2  = (*var_declare)->children[3];
-	ast_node_t *node_min2  = (*var_declare)->children[4];
-
-	ast_node_t *node_max3  = (*var_declare)->children[5];
-	ast_node_t *node_min3  = (*var_declare)->children[6];
-
-	oassert(node_min2->type == NUMBERS && node_max2->type == NUMBERS);		
-	oassert(node_min3->type == NUMBERS && node_max3->type == NUMBERS);
-
-	long addr_min = node_min2->types.vnumber->get_value();
-	long addr_max = node_max2->types.vnumber->get_value();
-
-	long addr_min1= node_min3->types.vnumber->get_value();
-	long addr_max1= node_max3->types.vnumber->get_value();
-
-	if((addr_min > addr_max) || (addr_min1 > addr_max1))
-	{
-		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number, "%s",
-				"Odin doesn't support arrays declared [m:n] where m is less than n.");
-	}	
-	else if((addr_min < 0 || addr_max < 0) || (addr_min1 < 0 || addr_max1 < 0))
-	{
-		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number, "%s",
-				"Odin doesn't support negative number in index.");
-	}
-
-	char *name = (*var_declare)->children[0]->types.identifier;
-
-	if (addr_min != 0 || addr_min1 != 0)
-	{
-		error_message(NETLIST_ERROR, (*var_declare)->children[0]->line_number, (*var_declare)->children[0]->file_number,
-				"%s: right memory address index must be zero\n", name);
-	}
-	
-	long addr_chunk_size = (addr_max1 - addr_min1 + 1);
-
-	(*var_declare)->chunk_size = addr_chunk_size;
-
-	long new_address_max = (addr_max - addr_min + 1)*addr_chunk_size -1;
-
-	change_to_number_node((*var_declare)->children[3], new_address_max);
-	change_to_number_node((*var_declare)->children[4], 0);
-
-	(*var_declare)->children[5] = free_whole_tree((*var_declare)->children[5]);
-	(*var_declare)->children[6] = free_whole_tree((*var_declare)->children[6]);
-
-	(*var_declare)->children[5] = (*var_declare)->children[7];
-	(*var_declare)->children[7] = NULL; 
-
-	(*var_declare)->num_children -= 2;
-
-	/* Searches for the matching node in the symbol table and updates it in place */
-
-	ast_node_t *copy_var_declare = ast_node_deep_copy(*var_declare);
-	char *temp_string = make_full_ref_name(NULL, NULL, NULL, (*var_declare)->children[0]->types.identifier, -1);
-	long sc_spot = sc_lookup_string(local_symbol_table_sc, temp_string);
-
-	for(int i = 0; i < num_local_symbol_table; i++)
-	{
-		if(local_symbol_table[i]->unique_count == (*var_declare)->unique_count)
-		{
-			local_symbol_table[i] = copy_var_declare;
-			break;
-		}
-	}
-
-	vtr::free(temp_string);
-
-	oassert(sc_spot != -1);
-	if(sc_spot != -1)
-	{
-		free_whole_tree((ast_node_t *)local_symbol_table_sc->data[sc_spot]);
-		local_symbol_table_sc->data[sc_spot] = copy_var_declare;
-	}
-
-}
 
 void convert_2D_to_1D_array_ref(ast_node_t **node, STRING_CACHE_LIST *local_string_cache_list)
 {
@@ -986,7 +897,6 @@ void convert_2D_to_1D_array_ref(ast_node_t **node, STRING_CACHE_LIST *local_stri
 	oassert(sc_spot != -1);
 
 	ast_node_t *array_size = ast_node_deep_copy((ast_node_t *)local_symbol_table_sc->data[sc_spot]);
-	
 	change_to_number_node(array_size, array_size->chunk_size);
 
 	ast_node_t *array_row = (*node)->children[1];
