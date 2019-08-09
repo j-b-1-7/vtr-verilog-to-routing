@@ -88,8 +88,9 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node, char *instance_na
 void create_all_driver_nets_in_this_module(char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list);
 void create_all_driver_nets_in_this_function(char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list);
 
-void create_top_driver_nets(ast_node_t* module, char *instance_name_prefix);
-void create_top_output_nodes(ast_node_t* module, char *instance_name_prefix);
+void create_top_driver_nets(ast_node_t* module, char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list);
+void create_top_output_nodes(ast_node_t* module, char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list);
+void netlist_expand_symbol_table(char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list);
 nnet_t* define_nets_with_driver(ast_node_t* var_declare, char *instance_name_prefix);
 nnet_t* define_nodes_and_nets_with_driver(ast_node_t* var_declare, char *instance_name_prefix);
 
@@ -308,11 +309,12 @@ void create_netlist()
 	simplify_ast_module(&top_module, top_sc_list);
 
 	/* now recursively parse the modules by going through the tree of modules starting at top */
-	create_top_driver_nets(top_module, top_string);
+	create_top_driver_nets(top_module, top_string, top_sc_list);
 	init_implicit_memory_index();
 	convert_ast_to_netlist_recursing_via_modules(&top_module, top_string, top_sc_list, 0);
 	free_implicit_memory_index_and_finalize_memories();
-	create_top_output_nodes(top_module, top_string);
+	create_top_output_nodes(top_module, top_string, top_sc_list);
+	
 
 	for(i = 0; i < top_sc_list->local_param_table_sc->size; i++)
 	{
@@ -321,10 +323,10 @@ void create_netlist()
 	top_sc_list->local_param_table_sc = sc_free_string_cache(top_sc_list->local_param_table_sc);
 	top_sc_list->local_symbol_table_sc = sc_free_string_cache(top_sc_list->local_symbol_table_sc);
 
-	for (i = 0; i < top_sc_list->num_local_symbol_table; i++)
-	{
-		free_whole_tree(top_sc_list->local_symbol_table[i]);
-	}
+	// for (i = 0; i < top_sc_list->num_local_symbol_table; i++)
+	// {
+	// 	free_whole_tree(top_sc_list->local_symbol_table[i]);
+	// }
 
 	top_sc_list->num_local_symbol_table = 0;
 	top_sc_list->local_symbol_table = (ast_node_t **)vtr::free(top_sc_list->local_symbol_table);
@@ -341,28 +343,14 @@ void create_netlist()
  *-------------------------------------------------------------------------------------------*/
 void look_for_clocks(netlist_t *netlist)
 {
+
 	int i;
 
 	for (i = 0; i < netlist->num_ff_nodes; i++)
 	{
-		oassert(netlist->ff_nodes);
-		oassert(netlist->ff_nodes[i]);
-		oassert(netlist->ff_nodes[i]->input_pins);
-		oassert(netlist->ff_nodes[i]->input_pins[1]);
-		oassert(netlist->ff_nodes[i]->input_pins[1]->net);
-
-		nnet_t *clk_net = netlist->ff_nodes[i]->input_pins[1]->net;
-
-		if(	clk_net != netlist->one_net
-		&&	clk_net != netlist->zero_net
-		&&	clk_net != netlist->pad_net )
+		if (netlist->ff_nodes[i]->input_pins[1]->net->driver_pin->node->type != CLOCK_NODE)
 		{
-			if(	clk_net->driver_pin
-			&& clk_net->driver_pin->node
-			&& clk_net->driver_pin->node->type != CLOCK_NODE)
-			{
-				clk_net->driver_pin->node->type = CLOCK_NODE;
-			}
+			netlist->ff_nodes[i]->input_pins[1]->net->driver_pin->node->type = CLOCK_NODE;
 		}
 	}
 }
@@ -456,6 +444,38 @@ ast_node_t *find_top_module()
 	return ast_modules[found_top];
 }
 
+void netlist_expand_symbol_table(char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list)
+{
+	ast_node_t **local_symbol_table = local_string_cache_list->local_symbol_table;
+	long num_local_symbol_table = local_string_cache_list->num_local_symbol_table;
+
+	signal_list_t **var_signal_list = (signal_list_t**)vtr::calloc(num_local_symbol_table, sizeof(signal_list_t*));
+
+	/* create all the driven nets based on the "reg" registers */
+	create_all_driver_nets_in_this_module(instance_name_prefix, local_string_cache_list);
+
+	for(int i = 0; i < num_local_symbol_table; i++)
+	{
+		if (local_symbol_table[i]->types.variable.is_parameter == 0 && local_symbol_table[i]->children[5])
+		{
+			oassert(local_symbol_table[i]->type == VAR_DECLARE || local_symbol_table[i]->type == BLOCKING_STATEMENT);
+			if(local_symbol_table[i]->type == VAR_DECLARE)
+			{
+				var_signal_list[i] = init_signal_list();
+			}
+
+			else if(local_symbol_table[i]->type == BLOCKING_STATEMENT)
+			{
+				var_signal_list[i] = assignment_alias(local_symbol_table[i], instance_name_prefix, local_string_cache_list);
+			}
+
+			terminate_continuous_assignment(NULL, var_signal_list[i], instance_name_prefix);
+		}
+	}
+
+	vtr::free(var_signal_list);
+}
+
 /*---------------------------------------------------------------------------------------------
  * (function: convert_ast_to_netlist_recursing_via_modules)
  * 	Recurses through modules by depth first traversal of the tree of modules.  Expands
@@ -469,6 +489,7 @@ void convert_ast_to_netlist_recursing_via_modules(ast_node_t** current_module, c
 	if ((*current_module)->types.module.size_module_instantiations == 0 &&
 		(*current_module)->types.function.size_function_instantiations == 0)
 	{
+		netlist_expand_symbol_table(instance_name, local_string_cache_list);
 		list = netlist_expand_ast_of_module(current_module, instance_name, local_string_cache_list);
 	}
 	else
@@ -644,10 +665,15 @@ void convert_ast_to_netlist_recursing_via_modules(ast_node_t** current_module, c
 		}
 
 		/* once we've done everyone lower, we can do this module */
+		netlist_expand_symbol_table(instance_name, local_string_cache_list);
 		list = netlist_expand_ast_of_module(current_module, instance_name, local_string_cache_list);
 	}
 
-	if (list) free_signal_list(list);
+	if (list)
+	{
+		free_signal_list(list);
+	} 
+
 }
 
 /*---------------------------------------------------------------------------
@@ -715,19 +741,16 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 					}
 				}
 
-				/* create all the driven nets based on the "reg" registers */
-				create_all_driver_nets_in_this_module(instance_name_prefix, local_string_cache_list);
-
 				/* process elements in the list */
 				if (node->num_children > 0)
 				{
 					oassert(child_skip_list);
 					for (i = 0; i < node->num_children; i++)
 					{
-						/*if (node->children[i]->type == VAR_DECLARE_LIST)
+						if (node->children[i]->type == VAR_DECLARE_LIST)
 						{
 							child_skip_list[i] = true;
-						}*/
+						}
 						if (node->children[i]->type == MODULE_INSTANCE)
 						{
                             /* ELSE IF - we deal with instantiations of modules twice to alias input and output nets.  In this
@@ -785,12 +808,10 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 						}
 					}
 				}
+				abort();
                 break;
             case VAR_DECLARE:
-                if(node->types.variable.is_parameter == 0 && node->children[5]){
-                    /*we don't create signal list on declaration.*/
-					return_sig_list = init_signal_list();
-                }
+				abort();
                 skip_children = true;
                 break;
             case FUNCTION_ITEMS:
@@ -943,13 +964,6 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 					terminate_continuous_assignment(node, children_signal_list[i], instance_name_prefix);
 				}
 				break;
-			case VAR_DECLARE_LIST:
-				for(i = 0; i < node->num_children; i++) {
-					if(node->children[i]->types.variable.is_parameter == 0 && node->children[i]->children[5]){
-						terminate_continuous_assignment(node, children_signal_list[i], instance_name_prefix);
-					}
-				}
-			break;
 			case ALWAYS:
 				/* attach the drivers to the driver nets */
 				switch(circuit_edge)
@@ -1115,7 +1129,7 @@ void create_all_driver_nets_in_this_module(char *instance_name_prefix, STRING_CA
 }
 
 /*---------------------------------------------------------------------------------------------
- * (function: create_all_driver_nets_in_this_module)
+ * (function: create_all_driver_nets_in_this_function)
  * 	Use to define all the nets that will connect to instantiated nodes.  This means we go
  * 	through the var_declare_list of module variables and all registers are made
  * 	as drivers.
@@ -1161,31 +1175,26 @@ void create_all_driver_nets_in_this_function(char *instance_name_prefix, STRING_
  * 	Also make the 0 and 1 constant nodes at this point.
  *  Note: Also creates hbpad signal for padding hard block inputs.
  *-------------------------------------------------------------------------*/
-void create_top_driver_nets(ast_node_t* module, char *instance_name_prefix)
+void create_top_driver_nets(ast_node_t* module, char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list)
 {
 	/* with the top module we need to visit the entire ast tree */
-	long i, j;
+	long i;
 	long sc_spot;
 	ast_node_t *module_items = module->children[2];
+	ast_node_t **local_symbol_table = local_string_cache_list->local_symbol_table;
+	long num_local_symbol_table = local_string_cache_list->num_local_symbol_table;
 	npin_t *new_pin;
 
 	oassert(module_items->type == MODULE_ITEMS);
 
-	/* search for VAR_DECLARE_LISTS */
-	if (module_items->num_children > 0)
+	/* go through the symbol table looking for inputs to make drivers */
+	if(local_symbol_table && num_local_symbol_table > 0)
 	{
-		for (i = 0; i < module_items->num_children; i++)
+		for (i = 0; i < num_local_symbol_table; i++)
 		{
-			if (module_items->children[i]->type == VAR_DECLARE_LIST)
+			if (local_symbol_table[i]->types.variable.is_input)
 			{
-				/* go through the vars in this declare list looking for inputs to make drivers */
-				for (j = 0; j < module_items->children[i]->num_children; j++)
-				{
-					if (module_items->children[i]->children[j]->types.variable.is_input)
-					{
-						define_nodes_and_nets_with_driver(module_items->children[i]->children[j], instance_name_prefix);
-					}
-				}
+				define_nodes_and_nets_with_driver(local_symbol_table[i], instance_name_prefix);
 			}
 		}
 	}
@@ -1271,131 +1280,131 @@ void create_top_driver_nets(ast_node_t* module, char *instance_name_prefix)
  * 	as actual nodes in the netlist and hooks them up to the netlist as it has been
  * 	created.  Therefore, this is one of the last steps when creating the netlist.
  *-------------------------------------------------------------------------------------------*/
-void create_top_output_nodes(ast_node_t* module, char *instance_name_prefix)
+void create_top_output_nodes(ast_node_t* module, char *instance_name_prefix, STRING_CACHE_LIST *local_string_cache_list)
 {
 	/* with the top module we need to visit the entire ast tree */
-	long i, j;
+	long i;
 	int k;
 	long sc_spot;
 	ast_node_t *module_items = module->children[2];
+	ast_node_t **local_symbol_table = local_string_cache_list->local_symbol_table;
+	long num_local_symbol_table = local_string_cache_list->num_local_symbol_table;
 	nnode_t *new_node;
 
 	oassert(module_items->type == MODULE_ITEMS);
 
 	/* search for VAR_DECLARE_LISTS */
-	if (module_items->num_children > 0)
+	if (local_symbol_table && num_local_symbol_table > 0)
 	{
-		for (i = 0; i < module_items->num_children; i++)
+		/* go through the vars in this declare list */
+		for (i = 0; i < num_local_symbol_table; i++)
 		{
-			if (module_items->children[i]->type == VAR_DECLARE_LIST)
+			if (local_symbol_table[i]->types.variable.is_output)
 			{
-				/* go through the vars in this declare list */
-				for (j = 0; j < module_items->children[i]->num_children; j++)
+				char *full_name;
+				ast_node_t *var_declare = local_symbol_table[i];
+				npin_t *new_pin;
+
+				/* decide what type of variable this is */
+				if (var_declare->children[1] == NULL)
 				{
-					if (module_items->children[i]->children[j]->types.variable.is_output)
+					/* IF - this is a identifier then find it in the output_nets and hook it up to a newly created node */
+					/* get the name of the pin */
+					full_name = make_full_ref_name(instance_name_prefix, NULL, NULL, var_declare->children[0]->types.identifier, -1);
+
+					/* check if the instantiation pin exists. */
+					if ((sc_spot = sc_lookup_string(output_nets_sc, full_name)) == -1)
 					{
-						char *full_name;
-						ast_node_t *var_declare = module_items->children[i]->children[j];
-						npin_t *new_pin;
+						error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number,
+								"Output pin (%s) is not hooked up!!!\n", full_name);
+					}
 
-						/* decide what type of variable this is */
-						if (var_declare->children[1] == NULL)
+					new_pin = allocate_npin();
+					/* hookup this pin to this net */
+					add_fanout_pin_to_net((nnet_t*)output_nets_sc->data[sc_spot], new_pin);
+
+					/* create the node */
+					new_node = allocate_nnode();
+					new_node->related_ast_node = local_symbol_table[i];
+					new_node->name = full_name;
+					new_node->type = OUTPUT_NODE;
+					/* allocate the pins needed */
+					allocate_more_input_pins(new_node, 1);
+					add_input_port_information(new_node, 1);
+
+					/* hookup the pin, and node */
+					add_input_pin_to_node(new_node, new_pin, 0);
+
+					/* record this node */
+					verilog_netlist->top_output_nodes = (nnode_t **)vtr::realloc(verilog_netlist->top_output_nodes, sizeof(nnode_t*)*(verilog_netlist->num_top_output_nodes+1));
+					verilog_netlist->top_output_nodes[verilog_netlist->num_top_output_nodes] = new_node;
+					verilog_netlist->num_top_output_nodes++;
+				}
+				else if (var_declare->children[3] == NULL)
+				{
+					ast_node_t *node_max  = var_declare->children[1];
+					ast_node_t *node_min  = var_declare->children[2];
+					
+					oassert(node_min->type == NUMBERS && node_max->type == NUMBERS);
+					long max_value = node_max->types.vnumber->get_value();
+					long min_value = node_min->types.vnumber->get_value();
+
+					if(min_value > max_value)
+					{
+						error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
+								"Odin doesn't support arrays declared [m:n] where m is less than n.");
+					}	
+					//ODIN doesn't support negative number in index now.
+					if(min_value < 0 || max_value < 0)
+					{
+						warning_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
+								"Odin doesn't support negative number in index.");
+					}
+
+					/* assume digit 1 is largest */
+					for (k = min_value; k <= max_value; k++)
+					{
+						/* get the name of the pin */
+						full_name = make_full_ref_name(instance_name_prefix, NULL, NULL, var_declare->children[0]->types.identifier, k);
+
+						/* check if the instantiation pin exists. */
+						if ((sc_spot = sc_lookup_string(output_nets_sc, full_name)) == -1)
 						{
-							/* IF - this is a identifier then find it in the output_nets and hook it up to a newly created node */
-							/* get the name of the pin */
-							full_name = make_full_ref_name(instance_name_prefix, NULL, NULL, var_declare->children[0]->types.identifier, -1);
-
-							/* check if the instantiation pin exists. */
-							if ((sc_spot = sc_lookup_string(output_nets_sc, full_name)) == -1)
-							{
-								error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number,
-										"Output pin (%s) is not hooked up!!!\n", full_name);
-							}
-
-							new_pin = allocate_npin();
-							/* hookup this pin to this net */
-							add_fanout_pin_to_net((nnet_t*)output_nets_sc->data[sc_spot], new_pin);
-
-							/* create the node */
-							new_node = allocate_nnode();
-							new_node->related_ast_node = module_items->children[i]->children[j];
-							new_node->name = full_name;
-							new_node->type = OUTPUT_NODE;
-							/* allocate the pins needed */
-							allocate_more_input_pins(new_node, 1);
-							add_input_port_information(new_node, 1);
-
-							/* hookup the pin, and node */
-							add_input_pin_to_node(new_node, new_pin, 0);
-
-							/* record this node */
-							verilog_netlist->top_output_nodes = (nnode_t **)vtr::realloc(verilog_netlist->top_output_nodes, sizeof(nnode_t*)*(verilog_netlist->num_top_output_nodes+1));
-							verilog_netlist->top_output_nodes[verilog_netlist->num_top_output_nodes] = new_node;
-							verilog_netlist->num_top_output_nodes++;
+							error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number,
+									"Output pin (%s) is not hooked up!!!\n", full_name);
 						}
-						else if (var_declare->children[3] == NULL)
-						{
-							ast_node_t *node_max  = var_declare->children[1];
-							ast_node_t *node_min  = var_declare->children[2];
-							
-							oassert(node_min->type == NUMBERS && node_max->type == NUMBERS);
-							long max_value = node_max->types.vnumber->get_value();
-							long min_value = node_min->types.vnumber->get_value();
+						new_pin = allocate_npin();
+						/* hookup this pin to this net */
+						add_fanout_pin_to_net((nnet_t*)output_nets_sc->data[sc_spot], new_pin);
 
-							if(min_value > max_value)
-							{
-								error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
-										"Odin doesn't support arrays declared [m:n] where m is less than n.");
-							}	
-							//ODIN doesn't support negative number in index now.
-							if(min_value < 0 || max_value < 0)
-							{
-								warning_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
-										"Odin doesn't support negative number in index.");
-							}
+						/* create the node */
+						new_node = allocate_nnode();
+						new_node->related_ast_node = local_symbol_table[i];
+						new_node->name = full_name;
+						new_node->type = OUTPUT_NODE;
+						/* allocate the pins needed */
+						allocate_more_input_pins(new_node, 1);
+						add_input_port_information(new_node, 1);
 
-							/* assume digit 1 is largest */
-							for (k = min_value; k <= max_value; k++)
-							{
-								/* get the name of the pin */
-								full_name = make_full_ref_name(instance_name_prefix, NULL, NULL, var_declare->children[0]->types.identifier, k);
+						/* hookup the pin, and node */
+						add_input_pin_to_node(new_node, new_pin, 0);
 
-								/* check if the instantiation pin exists. */
-								if ((sc_spot = sc_lookup_string(output_nets_sc, full_name)) == -1)
-								{
-									error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number,
-											"Output pin (%s) is not hooked up!!!\n", full_name);
-								}
-								new_pin = allocate_npin();
-								/* hookup this pin to this net */
-								add_fanout_pin_to_net((nnet_t*)output_nets_sc->data[sc_spot], new_pin);
-
-								/* create the node */
-								new_node = allocate_nnode();
-								new_node->related_ast_node = module_items->children[i]->children[j];
-								new_node->name = full_name;
-								new_node->type = OUTPUT_NODE;
-								/* allocate the pins needed */
-								allocate_more_input_pins(new_node, 1);
-								add_input_port_information(new_node, 1);
-
-								/* hookup the pin, and node */
-								add_input_pin_to_node(new_node, new_pin, 0);
-
-								/* record this node */
-								verilog_netlist->top_output_nodes = (nnode_t **)vtr::realloc(verilog_netlist->top_output_nodes, sizeof(nnode_t*)*(verilog_netlist->num_top_output_nodes+1));
-								verilog_netlist->top_output_nodes[verilog_netlist->num_top_output_nodes] = new_node;
-								verilog_netlist->num_top_output_nodes++;
-							}
-						}
-						else
-						{
-							/* Implicit memory */
-							error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
-									"Memory not handled ... yet in create_top_output_nodes!\n");
-						}
+						/* record this node */
+						verilog_netlist->top_output_nodes = (nnode_t **)vtr::realloc(verilog_netlist->top_output_nodes, sizeof(nnode_t*)*(verilog_netlist->num_top_output_nodes+1));
+						verilog_netlist->top_output_nodes[verilog_netlist->num_top_output_nodes] = new_node;
+						verilog_netlist->num_top_output_nodes++;
 					}
 				}
+				else
+				{
+					/* Implicit memory */
+					error_message(NETLIST_ERROR, var_declare->children[0]->line_number, var_declare->children[0]->file_number, "%s",
+							"Memory not handled ... yet in create_top_output_nodes!\n");
+				}
+			}
+			else
+			{
+				local_symbol_table[i] = free_whole_tree(local_symbol_table[i]);
 			}
 		}
 	}
@@ -1823,6 +1832,9 @@ void create_symbol_table_for_module(ast_node_t* module_items, STRING_CACHE_LIST 
 									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
 									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
 								}
+
+								var_declare = free_whole_tree(var_declare);
+
 							}
 							else if ((var_declare->types.variable.is_reg) || (var_declare->types.variable.is_wire) 
 									|| (var_declare->types.variable.is_integer) || (var_declare->types.variable.is_genvar))
@@ -1838,31 +1850,35 @@ void create_symbol_table_for_module(ast_node_t* module_items, STRING_CACHE_LIST 
 									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.is_initialized = true;
 									((ast_node_t*)local_symbol_table_sc->data[sc_spot])->types.variable.initial_value = initial_value;
 								}
+								// breaks mcml
+								var_declare = free_whole_tree(var_declare);
+
 							}
 							else if (!var_declare->types.variable.is_integer)
 							{
 								abort();
 							}
+
+							
 						}
 						else
 						{
-							ast_node_t *stored_var_declare = var_declare;
-
 							/* store the data which is an idx here */
-							local_symbol_table_sc->data[sc_spot] = (void *)stored_var_declare;
+							local_symbol_table_sc->data[sc_spot] = (void *)var_declare;
 
 							/* store the symbol */
 							local_symbol_table = (ast_node_t **)vtr::realloc(local_symbol_table, sizeof(ast_node_t*)*(num_local_symbol_table+1));
-							local_symbol_table[num_local_symbol_table] = (ast_node_t *)stored_var_declare;
+							local_symbol_table[num_local_symbol_table] = (ast_node_t *)var_declare;
 							num_local_symbol_table ++;
 
 							/* check for an initial value and store it if found */
 							long initial_value;
-							if(check_for_initial_reg_value(stored_var_declare, &initial_value)){
-								stored_var_declare->types.variable.is_initialized = true;
-								stored_var_declare->types.variable.initial_value = initial_value;
+							if(check_for_initial_reg_value(var_declare, &initial_value)){
+								var_declare->types.variable.is_initialized = true;
+								var_declare->types.variable.initial_value = initial_value;
 							}
 						}
+						vtr::free(temp_string);
 
 						oassert(local_symbol_table_sc->data[sc_spot]);
 
@@ -1875,14 +1891,18 @@ void create_symbol_table_for_module(ast_node_t* module_items, STRING_CACHE_LIST 
 							convert_2D_to_1D_array((ast_node_t **)(&(local_symbol_table_sc->data[sc_spot])), local_string_cache_list);
 						}
 
-						vtr::free(temp_string);
-
 						module_items->children[i]->children[j] = NULL;
+						remove_child_from_node_at_index(module_items->children[i], j);
+						j--;
+
 					}
 				}
-				remove_child_from_node_at_index(module_items, i);
-				i--;
-
+				if(module_items->children[i]->num_children == 0)
+				{
+					module_items->children[i] = free_single_node(module_items->children[i]);
+					remove_child_from_node_at_index(module_items, i);
+					i--;
+				}
 			}
 			else if(module_items->children[i]->type == ASSIGN)
 			{
@@ -1937,6 +1957,7 @@ void create_symbol_table_for_module(ast_node_t* module_items, STRING_CACHE_LIST 
 			else
 			{
 				/* net was declared later; do nothing */
+				free_whole_tree(implicit_declarations[i]);
 			}
 		}
 
@@ -3844,7 +3865,7 @@ void terminate_continuous_assignment(ast_node_t *node, signal_list_t* assignment
 			/* create the unique name for this gate */
 			buf_node->name = node_name(buf_node, instance_name_prefix);
 
-			buf_node->related_ast_node = node;
+			buf_node->related_ast_node = ast_node_deep_copy(node);
 			/* allocate the pins needed */
 			allocate_more_input_pins(buf_node, 1);
 			add_input_port_information(buf_node, 1);

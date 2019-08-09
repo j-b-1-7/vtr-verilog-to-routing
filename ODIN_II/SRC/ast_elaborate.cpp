@@ -885,7 +885,6 @@ void update_string_caches(STRING_CACHE_LIST *local_string_cache_list)
 	}
 }
 
-
 void convert_2D_to_1D_array_ref(ast_node_t **node, STRING_CACHE_LIST *local_string_cache_list)
 {
 	STRING_CACHE *local_symbol_table_sc = local_string_cache_list->local_symbol_table_sc;
