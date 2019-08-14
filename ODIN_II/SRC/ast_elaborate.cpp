@@ -186,6 +186,41 @@ ast_node_t *reduce_expressions(ast_node_t *node, ast_node_t *parent, STRING_CACH
 
 				break;
 			}
+			case TASK:
+			{
+				skip_children = true;
+				break;
+			}
+			case TASK_INSTANCE:
+			{
+				// check ports
+				ast_node_t *connect_list = node->children[1]->children[1];
+				bool is_ordered_list;
+				if (connect_list->children[0]) // skip first connection
+				{
+					is_ordered_list = false; // name was specified
+				}
+				else
+				{
+					is_ordered_list = true;
+				}
+				
+				for (int i = 1; i < connect_list->num_children; i++)
+				{
+					if ((connect_list->children[i] 
+						&& connect_list->children[i]->children)
+						&& (( connect_list->children[i]->children[0] && is_ordered_list)
+						|| (!connect_list->children[i]->children[0] && !is_ordered_list)))
+					{
+						error_message(PARSE_ERROR, node->line_number, node->file_number, 
+								"%s", "Cannot mix port connections by name and port connections by ordered list\n");
+					}
+				}
+
+				skip_children = true;
+
+				break;
+			}
 			case MODULE_ITEMS:
 			{
 				/* look in the string cache for in-line continuous assignments */

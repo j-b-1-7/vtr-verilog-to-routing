@@ -271,6 +271,8 @@ enum ids
 	FUNCTION,
    	/* OTHER FUNCTION ITEMS */
   	FUNCTION_ITEMS,
+	TASK,
+	TASK_ITEMS,
 	/* primitives */
 	GATE,
 	GATE_INSTANCE,
@@ -287,6 +289,9 @@ enum ids
 	/* Function instances*/
 	FUNCTION_NAMED_INSTANCE,
 	FUNCTION_INSTANCE,
+
+	TASK_NAMED_INSTANCE,
+	TASK_INSTANCE,
 	/* Specify Items */
 	SPECIFY_ITEMS,
 	SPECIFY_PARAMETER,
@@ -371,6 +376,13 @@ struct typ
 		int size_function_instantiations;
 		int index;
 	} function;
+	struct
+	{
+		short is_instantiated;
+		ast_node_t **task_instantiations_instance;
+		int size_task_instantiations;
+		int index;
+	}task;
 	struct
 	{
 		int num_bit_strings;

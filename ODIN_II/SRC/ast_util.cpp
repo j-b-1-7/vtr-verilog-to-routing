@@ -705,7 +705,7 @@ char_list_t *get_name_of_pins(ast_node_t *var_node, char *instance_name_prefix, 
 
 	STRING_CACHE *local_symbol_table_sc = local_string_cache_list->local_symbol_table_sc;
 	STRING_CACHE *function_local_symbol_table_sc = local_string_cache_list->function_local_symbol_table_sc;
-
+	STRING_CACHE *task_local_symbol_table_sc = local_string_cache_list->task_local_symbol_table_sc;
 	if (var_node->type == ARRAY_REF)
 	{
 		width = 1;
@@ -752,6 +752,10 @@ char_list_t *get_name_of_pins(ast_node_t *var_node, char *instance_name_prefix, 
 		else if ((sc_spot = sc_lookup_string(local_symbol_table_sc, temp_string)) > -1)
 		{
 			sym_node = (ast_node_t*)local_symbol_table_sc->data[sc_spot];
+		}
+		else if((sc_spot = sc_lookup_string(task_local_symbol_table_sc, temp_string)) > -1)
+		{
+			sym_node = (ast_node_t*)task_local_symbol_table_sc->data[sc_spot];
 		}
 		else 
 		{
@@ -865,6 +869,7 @@ long get_size_of_variable(ast_node_t *node, STRING_CACHE_LIST *local_string_cach
 
 	STRING_CACHE *local_symbol_table_sc = local_string_cache_list->local_symbol_table_sc;
 	STRING_CACHE *function_local_symbol_table_sc = local_string_cache_list->function_local_symbol_table_sc;
+	STRING_CACHE *task_local_symbol_table_sc = local_string_cache_list->task_local_symbol_table_sc;
 	STRING_CACHE *local_param_table_sc = local_string_cache_list->local_param_table_sc;
 
 	switch(node->type)
@@ -900,6 +905,13 @@ long get_size_of_variable(ast_node_t *node, STRING_CACHE_LIST *local_string_cach
 			if (sc_spot > -1)
 			{
 				var_declare = (ast_node_t *)function_local_symbol_table_sc->data[sc_spot];
+				break;
+			}
+
+			sc_spot = sc_lookup_string(task_local_symbol_table_sc, node->types.identifier);
+			if (sc_spot > -1)
+			{
+				var_declare = (ast_node_t *)task_local_symbol_table_sc->data[sc_spot];
 				break;
 			}
 
