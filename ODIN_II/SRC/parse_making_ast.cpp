@@ -510,6 +510,28 @@ ast_node_t *resolve_ports(ids top_type, ast_node_t *symbol_list)
 					error_message(PARSE_ERROR, symbol_list->children[i]->line_number, current_parse_file, "No matching declaration for port %s\n", symbol_list->children[i]->children[0]->types.identifier);
 				}
 			}
+			else if(top_type == TASK)
+			{
+				/* find the related INPUT or OUTPUT definition and store that instead */
+				if ((sc_spot = sc_lookup_string(tasks_inputs_sc, symbol_list->children[i]->children[0]->types.identifier)) != -1)
+				{
+					oassert(((ast_node_t*)tasks_inputs_sc->data[sc_spot])->type == VAR_DECLARE);
+					free_whole_tree(symbol_list->children[i]);
+					symbol_list->children[i] = (ast_node_t*)tasks_inputs_sc->data[sc_spot];
+					oassert(symbol_list->children[i]->types.variable.is_input);
+				}
+				else if ((sc_spot = sc_lookup_string(tasks_outputs_sc, symbol_list->children[i]->children[0]->types.identifier)) != -1)
+				{
+					oassert(((ast_node_t*)tasks_outputs_sc->data[sc_spot])->type == VAR_DECLARE);
+					free_whole_tree(symbol_list->children[i]);
+					symbol_list->children[i] = (ast_node_t*)tasks_outputs_sc->data[sc_spot];
+					oassert(symbol_list->children[i]->types.variable.is_output);
+				}
+				else
+				{
+					error_message(PARSE_ERROR, symbol_list->children[i]->line_number, current_parse_file, "No matching declaration for port %s\n", symbol_list->children[i]->children[0]->types.identifier);
+				}
+			}
 
 			symbol_list->children[i]->types.variable.is_port = true;
 		}
@@ -1753,12 +1775,12 @@ ast_node_t *newFunction(ast_node_t *list_of_ports, ast_node_t *list_of_module_it
 	return new_node;
 }
 
-ast_node_t *newTask(char *task_name, ast_node_t *list_of_task_items, int line_number)
+ast_node_t *newTask(char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number)
 {
 	long sc_spot;
 	ast_node_t *symbol_node = newSymbolNode(task_name, line_number);
-	ast_node_t *list_of_ports = NULL;
 	ast_node_t *var_node = NULL;
+	ast_node_t *port_declarations = NULL;
 	char *label = NULL;
 	
 	/* create a node for this array reference */
@@ -1814,6 +1836,16 @@ ast_node_t *newTask(char *task_name, ast_node_t *list_of_task_items, int line_nu
 				}
 			}
 		}
+	}
+
+	if(list_of_ports)
+	{
+		port_declarations = resolve_ports(TASK, list_of_ports);
+	}
+	/* ports are expected to be in module items */
+	if (port_declarations)
+	{
+		add_child_to_node_at_index(list_of_task_items, port_declarations, 0);
 	}
 
 	/* allocate child nodes to this node */

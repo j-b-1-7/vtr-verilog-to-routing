@@ -82,7 +82,7 @@ ast_node_t *newIntegerTypeVarDeclare(char* symbol, ast_node_t *expression1, ast_
 /* HIGH LEVEL ITEMS */
 ast_node_t *newModule(char* module_name, ast_node_t *list_of_parameters, ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number);
 ast_node_t *newFunction(ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number);
-ast_node_t *newTask(char *task_name, ast_node_t *list_of_task_items, int line_number);
+ast_node_t *newTask(char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number);
 void next_module();
 void next_function();
 void next_task();

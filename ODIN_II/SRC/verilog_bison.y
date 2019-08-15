@@ -93,7 +93,7 @@ int yylex(void);
 %type <node> source_text items module list_of_module_items list_of_task_items list_of_function_items module_item function_item task_item module_parameters module_ports
 %type <node> list_of_parameter_declaration parameter_declaration task_parameter_declaration specparam_declaration list_of_port_declaration port_declaration signed_port_declaration defparam_declaration 
 %type <node> function_declaration function_input_declaration
-%type <node> task_declaration task_input_declaration task_output_declaration
+%type <node> task_declaration task_input_declaration task_output_declaration task_inout_declaration
 %type <node> input_declaration output_declaration inout_declaration variable_list function_output_variable function_id_and_output_variable
 %type <node> integer_type_variable_list variable integer_type_variable
 %type <node> net_declaration integer_declaration function_instantiation task_instantiation genvar_declaration
@@ -230,7 +230,8 @@ function_declaration:
 	;
 
 task_declaration:
-	vTASK vSYMBOL_ID ';' list_of_task_items vENDTASK	{$$ = newTask($2, $4, yylineno);}
+	vTASK vSYMBOL_ID ';' list_of_task_items vENDTASK	{$$ = newTask($2, NULL, $4, yylineno);}
+	| vTASK vSYMBOL_ID module_ports ';' list_of_task_items vENDTASK	{$$ = newTask($2, $3, $5, yylineno);}
 	;
 
 initial_block:
@@ -258,13 +259,24 @@ list_of_function_items:
 	;
 
 task_input_declaration:
-	vINPUT vSIGNED variable_list ';'	{$$ = markAndProcessSymbolListWith(TASK, INPUT, $3, true);}
-	| vINPUT variable_list ';'			{$$ = markAndProcessSymbolListWith(TASK, INPUT, $2, false);}
+	vINPUT net_declaration					{$$ = markAndProcessSymbolListWith(TASK,INPUT, $2, false);}
+	| vINPUT integer_declaration			{$$ = markAndProcessSymbolListWith(TASK,INPUT, $2, true);}
+	| vINPUT vSIGNED variable_list ';'		{$$ = markAndProcessSymbolListWith(TASK,INPUT, $3, true);}
+	| vINPUT variable_list ';'				{$$ = markAndProcessSymbolListWith(TASK,INPUT, $2, false);}
 	;
 
 task_output_declaration:
-	vOUTPUT vSIGNED variable_list ';'	{$$ = markAndProcessSymbolListWith(TASK, OUTPUT, $3, true);}
-	| vOUTPUT variable_list ';'			{$$ = markAndProcessSymbolListWith(TASK, OUTPUT, $2, false);}
+	vOUTPUT net_declaration					{$$ = markAndProcessSymbolListWith(TASK,OUTPUT, $2, false);}
+	| vOUTPUT integer_declaration			{$$ = markAndProcessSymbolListWith(TASK,OUTPUT, $2, true);}
+	| vOUTPUT vSIGNED variable_list ';'		{$$ = markAndProcessSymbolListWith(TASK,OUTPUT, $3, true);}
+	| vOUTPUT variable_list ';'				{$$ = markAndProcessSymbolListWith(TASK,OUTPUT, $2, false);}
+	;
+
+task_inout_declaration:
+	vINOUT net_declaration					{$$ = markAndProcessSymbolListWith(TASK,INOUT, $2, false);}
+	| vINOUT integer_declaration			{$$ = markAndProcessSymbolListWith(TASK,INOUT, $2, true);}
+	| vINOUT vSIGNED variable_list ';'		{$$ = markAndProcessSymbolListWith(TASK,INOUT, $3, true);}
+	| vINOUT variable_list ';'				{$$ = markAndProcessSymbolListWith(TASK,INOUT, $2, false);}
 	;
 
 list_of_task_items:
@@ -286,6 +298,7 @@ task_item:
 	task_parameter_declaration			{$$ = $1;}
 	| task_input_declaration			{$$ = $1;}
 	| task_output_declaration			{$$ = $1;}
+	| task_inout_declaration			{$$ = $1;}
 	| net_declaration 					{$$ = $1;}
 	| integer_declaration 				{$$ = $1;}
 	| continuous_assign					{$$ = $1;}
