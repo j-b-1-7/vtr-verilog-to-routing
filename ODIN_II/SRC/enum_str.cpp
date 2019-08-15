@@ -133,7 +133,9 @@ const char *ids_STR []=
    	/* OTHER MODULE AND FUNCTION ITEMS */
 	"FUNCTION",
    	/* OTHER FUNCTION ITEMS */
-  	"FUNCTION_ITEMS",
+	" 	FUNCTION_ITEMS",
+	"TASK",
+	"TASK_ITEMS",
 	/* primitives */
 	"GATE",
 	"GATE_INSTANCE",
@@ -150,6 +152,7 @@ const char *ids_STR []=
 	/* Function instances*/
 	"FUNCTION_NAMED_INSTANCE",
 	"FUNCTION_INSTANCE",
+	"TASK_INSTANCE",
 	/* Specify Items */
 	"SPECIFY_ITEMS",
 	"SPECIFY_PARAMETER",
@@ -165,6 +168,7 @@ const char *ids_STR []=
 	"CASE_ITEM",
 	"CASE_DEFAULT",
 	"ALWAYS",
+	"STATEMENT",
 	"IF",
 	"IF_Q",
 	"FOR",

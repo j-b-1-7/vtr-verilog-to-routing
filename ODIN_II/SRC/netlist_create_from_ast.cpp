@@ -310,8 +310,7 @@ void convert_ast_to_netlist_recursing_via_modules(ast_node_t** current_module, c
 
 	/* BASE CASE is when there are no other instantiations of modules in this module */
 	if ((*current_module)->types.module.size_module_instantiations == 0 &&
-		(*current_module)->types.function.size_function_instantiations == 0 &&
-		(*current_module)->types.task.size_task_instantiations == 0)
+		(*current_module)->types.function.size_function_instantiations == 0 )
 	{
 		list = netlist_expand_ast_of_module(current_module, instance_name, local_string_cache_list);
 	}
@@ -379,36 +378,38 @@ void convert_ast_to_netlist_recursing_via_modules(ast_node_t** current_module, c
 			/* clean up */
 			vtr::free(temp_instance_name);
 		}
-		int task_offset = function_offset + k;
-		for(k = 0; k < (*current_module)->types.task.size_task_instantiations; k++)
-		{
-			/* make the stringed up task instance name - instance name is
-			 * MODULE_INSTANCE->MODULE_NAMED_INSTANCE(child[1])->IDENTIFIER(child[0]).
-			 * module name is MODULE_INSTANCE->IDENTIFIER(child[0])
-			 */
 
-			char *temp_instance_name = make_full_ref_name(instance_name,
-				(*current_module)->types.task.task_instantiations_instance[k]->children[0]->types.identifier,
-				(*current_module)->types.task.task_instantiations_instance[k]->children[1]->children[0]->types.identifier,
-				NULL, -1);
+		//(*current_module)->types.task.size_task_instantiations == 0
+		// int task_offset = function_offset + k;
+		// for(k = 0; k < (*current_module)->types.task.size_task_instantiations; k++)
+		// {
+		// 	/* make the stringed up task instance name - instance name is
+		// 	 * MODULE_INSTANCE->MODULE_NAMED_INSTANCE(child[1])->IDENTIFIER(child[0]).
+		// 	 * module name is MODULE_INSTANCE->IDENTIFIER(child[0])
+		// 	 */
 
-			long sc_spot;
-			/* lookup the name of the module associated with this instantiated point */
-			if ((sc_spot = sc_lookup_string(module_names_to_idx, temp_instance_name)) == -1)
-			{
-				error_message(NETLIST_ERROR, (*current_module)->line_number, (*current_module)->file_number,
-						"Can't find instance name %s\n", temp_instance_name);
-			}
+		// 	char *temp_instance_name = make_full_ref_name(instance_name,
+		// 		(*current_module)->types.task.task_instantiations_instance[k]->children[0]->types.identifier,
+		// 		(*current_module)->types.task.task_instantiations_instance[k]->children[1]->children[0]->types.identifier,
+		// 		NULL, -1);
 
-			STRING_CACHE_LIST *task_string_cache_list = local_string_cache_list->children[task_offset+k];
-			oassert(!strcmp(task_string_cache_list->instance_name_prefix, temp_instance_name));
+		// 	long sc_spot;
+		// 	/* lookup the name of the module associated with this instantiated point */
+		// 	if ((sc_spot = sc_lookup_string(module_names_to_idx, temp_instance_name)) == -1)
+		// 	{
+		// 		error_message(NETLIST_ERROR, (*current_module)->line_number, (*current_module)->file_number,
+		// 				"Can't find instance name %s\n", temp_instance_name);
+		// 	}
+
+		// 	STRING_CACHE_LIST *task_string_cache_list = local_string_cache_list->children[task_offset+k];
+		// 	oassert(!strcmp(task_string_cache_list->instance_name_prefix, temp_instance_name));
 			
-			/* recursive call point */
-			convert_ast_to_netlist_recursing_via_modules(((ast_node_t**)&module_names_to_idx->data[sc_spot]), temp_instance_name, task_string_cache_list, level+1);
+		// 	/* recursive call point */
+		// 	convert_ast_to_netlist_recursing_via_modules(((ast_node_t**)&module_names_to_idx->data[sc_spot]), temp_instance_name, task_string_cache_list, level+1);
 
-			/* clean up */
-			vtr::free(temp_instance_name);
-		}
+		// 	/* clean up */
+		// 	vtr::free(temp_instance_name);
+		// }
 
 		/* once we've done everyone lower, we can do this module */
 		list = netlist_expand_ast_of_module(current_module, instance_name, local_string_cache_list);
@@ -608,9 +609,46 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
                 skip_children = true;
                 break;
 			case TASK_INSTANCE:
+
+				char *temp_instance_name = make_full_ref_name(instance_name_prefix,
+					node->children[0]->types.identifier,
+					NULL,
+					NULL, -1);
+
+				long sc_spot;
+				/* lookup the name of the module associated with this instantiated point */
+				if ((sc_spot = sc_lookup_string(module_names_to_idx, temp_instance_name)) == -1)
+				{
+					error_message(NETLIST_ERROR, (*current_module)->line_number, (*current_module)->file_number,
+							"Can't find instance name %s\n", temp_instance_name);
+				}
+
+				for(int i = 0; i < local_string_cache_list->num_children; i++)
+				{
+
+				}
+
+				STRING_CACHE_LIST *task_string_cache_list = local_string_cache_list->children[task_offset+k];
+				oassert(!strcmp(task_string_cache_list->instance_name_prefix, temp_instance_name));
+				
+
+
+				// Get the task node and call netlist_expand_from_ast on it
+
+
+
+				/* recursive call point */
+				convert_ast_to_netlist_recursing_via_modules(((ast_node_t**)&module_names_to_idx->data[sc_spot]), temp_instance_name, task_string_cache_list, level+1);
+
+				/* clean up */
+				vtr::free(temp_instance_name);
+
+
 				return_sig_list = connect_task_instantiation_and_alias(INSTANTIATE_DRIVERS, node, instance_name_prefix, local_string_cache_list);
-                skip_children = true;
-                break;
+				skip_children = true;
+
+				break;
+
 			case GATE:
 				/* create gate instances */
 				return_sig_list = create_gate(node, instance_name_prefix, local_string_cache_list);
@@ -632,9 +670,6 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 			}
 			/* ---------------------- */
 			case ASSIGN:
-				/* combinational path */
-				type_of_circuit = COMBINATIONAL;
-				circuit_edge = UNDEFINED_SENSITIVITY;
 				break;
 			case BLOCKING_STATEMENT:
 			case NON_BLOCKING_STATEMENT:
@@ -645,11 +680,14 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 				break;
 			}
 			case ALWAYS:
+			{
+				type_of_circuit = SEQUENTIAL;
 				oassert(child_skip_list);
 				/* evaluate if this is a sensitivity list with posedges/negedges (=SEQUENTIAL) or none (=COMBINATIONAL) */
 				local_clock_list = evaluate_sensitivity_list(node->children[0], instance_name_prefix, local_string_cache_list);
 				child_skip_list[0] = true;
 				break;
+			}
 			case CASE:
 				return_sig_list = create_case(node, instance_name_prefix, local_string_cache_list);
 				skip_children = true;
@@ -735,7 +773,8 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 					terminate_continuous_assignment(node, children_signal_list[i], instance_name_prefix);
 				}
 				break;
-			case ALWAYS:
+			case STATEMENT:
+			{
 				/* attach the drivers to the driver nets */
 				switch(circuit_edge)
 				{
@@ -759,11 +798,17 @@ signal_list_t *netlist_expand_ast_of_module(ast_node_t** node_ref, char *instanc
 					}
 
 				}
+				break;
+			}
+			case ALWAYS:
+			{
+				type_of_circuit = COMBINATIONAL;
 
 				if (local_clock_list)
 					free_signal_list(local_clock_list);
 					
 				break;
+			}
 			case BINARY_OPERATION:
 				oassert(node->num_children == 2);
 				return_sig_list = create_operation_node(node, children_signal_list, node->num_children, instance_name_prefix);
@@ -4244,8 +4289,6 @@ signal_list_t *evaluate_sensitivity_list(ast_node_t *delay_control, char *instan
 		free_signal_list(return_sig_list);
 		return_sig_list = NULL;
 	}
-
-	type_of_circuit = SEQUENTIAL;
 
 	return return_sig_list;
 }

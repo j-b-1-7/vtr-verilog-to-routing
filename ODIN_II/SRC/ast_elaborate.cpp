@@ -527,6 +527,7 @@ ast_node_t *finalize_ast(ast_node_t *node, ast_node_t *parent, STRING_CACHE_LIST
 			{
 				break;
 			}
+			case STATEMENT: //fallthrough
 			case ALWAYS: // fallthrough
 			case INITIALS:
 			{
@@ -1171,6 +1172,7 @@ ast_node_t *finalize_ast(ast_node_t *node, ast_node_t *parent, STRING_CACHE_LIST
 				if (node->num_children == 3) convert_2D_to_1D_array_ref(&node, local_string_cache_list);
 				break;
 			}
+			case STATEMENT: //fallthrough
 			case ALWAYS: // fallthrough
 			case INITIALS:
 			{

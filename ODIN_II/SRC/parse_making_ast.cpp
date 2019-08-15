@@ -1289,6 +1289,19 @@ ast_node_t *newAlways(ast_node_t *delay_control, ast_node_t *statement, int line
 
 	return new_node;
 }
+
+/*---------------------------------------------------------------------------------------------
+ * (function: newStatement)
+ *-------------------------------------------------------------------------------------------*/
+ast_node_t *newStatement(ast_node_t *statement, int line_number)
+{
+	/* create a node for this array reference */
+	ast_node_t* new_node = create_node_w_type(STATEMENT, line_number, current_parse_file);
+	/* allocate child nodes to this node */
+	allocate_children_to_node(new_node, { statement });
+
+	return new_node;
+}
 /*---------------------------------------------------------------------------------------------
  * (function: newModuleConnection)
  *-------------------------------------------------------------------------------------------*/
@@ -1718,34 +1731,45 @@ ast_node_t *newModule(char* module_name, ast_node_t *list_of_parameters, ast_nod
  * ----------------------------------------------------
  * (function: newFunction)
  *-------------------------------------------------------------------------------------------*/
-ast_node_t *newFunction(ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number) //function and module declaration work the same way (Lucas Cambuim)
+ast_node_t *newFunction(bool automatic, ast_node_t *output_node, ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number) 
 {
 
 	long i,j;
 	long sc_spot;
-	ast_node_t *var_node;
-	ast_node_t *symbol_node, *output_node;
+	char *label = NULL;
+	ast_node_t *var_node = NULL;
+	ast_node_t *symbol_node = NULL;
 
+	if(automatic)
+	{
+		warning_message(PARSE_ERROR, -1, -1, "ODIN does not yet support the keyword 'automatic.' IGNORING", NULL);
+	}
 
-	char *function_name = vtr::strdup(list_of_ports->children[0]->children[0]->types.identifier);
+	char *function_name = vtr::strdup(output_node->children[0]->children[0]->types.identifier);
 
-	output_node = newList(VAR_DECLARE_LIST, list_of_ports->children[0]);
-
-	markAndProcessSymbolListWith(FUNCTION, OUTPUT, output_node, list_of_ports->children[0]->types.variable.is_signed);
+	markAndProcessSymbolListWith(FUNCTION, OUTPUT, output_node, output_node->children[0]->types.variable.is_signed);
 
 	add_child_to_node_at_index(list_of_module_items, output_node, 0);
 
-	char *label = vtr::strdup(list_of_ports->children[0]->children[0]->types.identifier);
-
+	label = vtr::strdup(output_node->children[0]->children[0]->types.identifier);
 	var_node = newVarDeclare(label, NULL, NULL, NULL, NULL, NULL, yylineno);
 
-	list_of_ports->children[0] = var_node;
+	if(list_of_ports)
+	{
+		add_child_to_node_at_index(list_of_ports, var_node, 0);
+	}
+	else
+	{
+		list_of_ports = newList(VAR_DECLARE_LIST, var_node);
+	}
+
 
 
 	for(i = 0; i < list_of_module_items->num_children; i++) {
 		if(list_of_module_items->children[i]->type == VAR_DECLARE_LIST){
 			for(j = 0; j < list_of_module_items->children[i]->num_children; j++) {
-				if(list_of_module_items->children[i]->children[j]->types.variable.is_input){
+				if(list_of_module_items->children[i]->children[j]->types.variable.is_input)
+				{
                     label = vtr::strdup(list_of_module_items->children[i]->children[j]->children[0]->types.identifier);
                     var_node = newVarDeclare(label, NULL, NULL, NULL, NULL, NULL, yylineno);
 					newList_entry(list_of_ports,var_node);
@@ -1791,13 +1815,22 @@ ast_node_t *newFunction(ast_node_t *list_of_ports, ast_node_t *list_of_module_it
 	return new_node;
 }
 
-ast_node_t *newTask(char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number)
+ast_node_t *newTask(bool automatic, char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number)
 {
 	long sc_spot;
 	ast_node_t *symbol_node = newSymbolNode(task_name, line_number);
 	ast_node_t *var_node = NULL;
 	ast_node_t *port_declarations = NULL;
 	char *label = NULL;
+
+	if(automatic)
+	{
+		warning_message(PARSE_ERROR, -1, -1, "ODIN does not yet support the keyword 'automatic.' IGNORING", NULL);
+	}
+	if(list_of_ports)
+	{
+		
+	}
 	
 	/* create a node for this array reference */
 	ast_node_t* new_node = create_node_w_type(TASK, line_number, current_parse_file);

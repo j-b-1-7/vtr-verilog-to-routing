@@ -54,7 +54,7 @@ int yylex(void);
 %token <num_value> vNUMBER
 %token <num_value> vDELAY_ID
 %token vALWAYS vINITIAL vSPECIFY vAND vASSIGN vBEGIN vCASE vDEFAULT vDEFINE vELSE vEND vENDCASE
-%token vENDMODULE vENDSPECIFY vENDGENERATE vENDFUNCTION vENDTASK vIF vINOUT vINPUT vMODULE vGENERATE vFUNCTION vTASK
+%token vENDMODULE vENDSPECIFY vENDGENERATE vENDFUNCTION vENDTASK vIF vINOUT vINPUT vMODULE vGENERATE vFUNCTION vAUTOMATIC vTASK
 %token vOUTPUT vPARAMETER vLOCALPARAM vPOSEDGE vREG vWIRE vXNOR vXOR vDEFPARAM voANDAND vNAND vNEGEDGE vNOR vNOT vOR vFOR
 %token voOROR voLTE voGTE voPAL voSLEFT voSRIGHT voASRIGHT voEQUAL voNOTEQUAL voCASEEQUAL
 %token voCASENOTEQUAL voXNOR voNAND voNOR vWHILE vINTEGER vCLOG2 vGENVAR
@@ -92,7 +92,7 @@ int yylex(void);
 
 %type <node> source_text items module list_of_module_items list_of_task_items list_of_function_items module_item function_item task_item module_parameters module_ports
 %type <node> list_of_parameter_declaration parameter_declaration task_parameter_declaration specparam_declaration list_of_port_declaration port_declaration signed_port_declaration defparam_declaration 
-%type <node> function_declaration function_input_declaration
+%type <node> function_declaration function_input_declaration list_of_function_inputs function_ports
 %type <node> task_declaration task_input_declaration task_output_declaration task_inout_declaration
 %type <node> input_declaration output_declaration inout_declaration variable_list function_output_variable function_id_and_output_variable
 %type <node> integer_type_variable_list variable integer_type_variable
@@ -102,7 +102,7 @@ int yylex(void);
 %type <node> gate_declaration single_input_gate_instance
 %type <node> module_instantiation module_instance function_instance list_of_module_connections list_of_function_connections list_of_task_connections
 %type <node> list_of_multiple_inputs_gate_connections
-%type <node> module_connection always statement function_statement task_statement blocking_assignment
+%type <node> module_connection always statement statement_item blocking_assignment
 %type <node> non_blocking_assignment conditional_statement case_statement case_item_list case_items seq_block
 %type <node> stmt_list delay_control event_expression_list event_expression loop_statement
 %type <node> expression primary expression_list module_parameter
@@ -225,13 +225,30 @@ generate_item:
 	| loop_generate_construct	{$$ = $1;}
 	;
 
+
 function_declaration:
-	vFUNCTION function_output_variable ';' list_of_function_items vENDFUNCTION	{$$ = newFunction($2, $4, yylineno); }
+	vFUNCTION function_output_variable ';' list_of_function_items vENDFUNCTION	{$$ = newFunction(false, $2, NULL, $4, yylineno); }
+	| vFUNCTION function_output_variable function_ports ';'list_of_function_items vENDFUNCTION {$$ = newFunction(false, $2, $3, $5, yylineno);}
+	| vFUNCTION vAUTOMATIC function_output_variable ';' list_of_function_items vENDFUNCTION	{$$ = newFunction(true, $3, NULL, $5, yylineno); }
+	| vFUNCTION vAUTOMATIC function_output_variable function_ports ';'list_of_function_items vENDFUNCTION {$$ = newFunction(true, $3, $4, $6, yylineno);}
+	;
+
+function_ports:
+	'(' list_of_function_inputs ')'					{$$ = $2;}
+	| '(' list_of_function_inputs ',' ')'				{$$ = $2;}
+	| '(' ')'											{$$ = NULL;}
+	;
+
+list_of_function_inputs:
+	list_of_function_inputs ',' function_input_declaration		{$$ = newList_entry($1, $3);}
+	| function_input_declaration									{$$ = newList(VAR_DECLARE_LIST, $1);}
 	;
 
 task_declaration:
-	vTASK vSYMBOL_ID ';' list_of_task_items vENDTASK	{$$ = newTask($2, NULL, $4, yylineno);}
-	| vTASK vSYMBOL_ID module_ports ';' list_of_task_items vENDTASK	{$$ = newTask($2, $3, $5, yylineno);}
+	vTASK vSYMBOL_ID ';' list_of_task_items vENDTASK	{$$ = newTask(false, $2, NULL, $4, yylineno);}
+	| vTASK vSYMBOL_ID module_ports ';' list_of_task_items vENDTASK	{$$ = newTask(false, $2, $3, $5, yylineno);}
+	| vTASK vAUTOMATIC vSYMBOL_ID ';' list_of_task_items vENDTASK	{$$ = newTask(true, $3, NULL, $5, yylineno);}
+	| vTASK vAUTOMATIC vSYMBOL_ID module_ports ';' list_of_task_items vENDTASK	{$$ = newTask(true, $3, $4, $6, yylineno);}
 	;
 
 initial_block:
@@ -291,7 +308,7 @@ function_item:
 	| integer_declaration 			{$$ = $1;}
 	| continuous_assign				{$$ = $1;}
 	| defparam_declaration			{$$ = $1;}
-	| function_statement			{$$ = $1;} //TODO It`s temporary
+	| statement						{$$ = $1;} 
 	;
 
 task_item:
@@ -303,12 +320,13 @@ task_item:
 	| integer_declaration 				{$$ = $1;}
 	| continuous_assign					{$$ = $1;}
 	| defparam_declaration				{$$ = $1;}
-	| task_statement					{$$ = $1;} //TODO It`s temporary
+	| statement							{$$ = $1;} 
 	;
 
 function_input_declaration:
 	vINPUT vSIGNED variable_list ';'	{$$ = markAndProcessSymbolListWith(FUNCTION, INPUT, $3, true);}
 	| vINPUT variable_list ';'			{$$ = markAndProcessSymbolListWith(FUNCTION, INPUT, $2, false);}
+	| variable_list						{$$ = $1;}
 	;
 
 parameter_declaration:
@@ -370,6 +388,7 @@ function_output_variable:
 	function_id_and_output_variable	{$$ = newList(VAR_DECLARE_LIST, $1);}
 	;
 
+/* TODO: Add return type declaration e.g integer, real, realtime, or time */
 function_id_and_output_variable:
 	vSYMBOL_ID					{$$ = newVarDeclare($1, NULL, NULL, NULL, NULL, NULL, yylineno);}
 	| '[' expression ':' expression ']' vSYMBOL_ID	{$$ = newVarDeclare($6, $2, $4, NULL, NULL, NULL, yylineno);}
@@ -548,15 +567,11 @@ generate_block:
 	| vBEGIN ':' vSYMBOL_ID list_of_generate_items vEND	{free($3); $$ = $4;}
 	;
 
-function_statement:
-	statement	{$$ = newAlways(NULL, $1, yylineno);}
-	;
-
-task_statement:
-	statement	{$$ = newAlways(NULL, $1, yylineno);}
-	;
-
 statement:
+	statement_item		{$$ = newStatement($1, yylineno);}
+	;
+
+statement_item:
 	seq_block													{$$ = $1;}
 	| task_instantiation										{$$ = $1;}
 	| c_function ';'											{$$ = $1;}

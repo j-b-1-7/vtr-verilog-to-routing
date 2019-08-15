@@ -289,8 +289,6 @@ enum ids
 	/* Function instances*/
 	FUNCTION_NAMED_INSTANCE,
 	FUNCTION_INSTANCE,
-
-	TASK_NAMED_INSTANCE,
 	TASK_INSTANCE,
 	/* Specify Items */
 	SPECIFY_ITEMS,
@@ -307,6 +305,7 @@ enum ids
 	CASE_ITEM,
 	CASE_DEFAULT,
 	ALWAYS,
+	STATEMENT,
 	IF,
 	IF_Q,
 	FOR,

@@ -72,6 +72,7 @@ vPUNCT 	[\?\:\|\^\&\<\>\-\*\/\%\(\)\{\}\[\]\~\!\;\#\,\.\@\=\+]
 <INITIAL>"always"			{ MP; return vALWAYS;}
 <INITIAL>"and"				{ MP; return vAND;}
 <INITIAL>"assign"			{ MP; return vASSIGN;}
+<INITIAL>"automatic"		{ MP; return vAUTOMATIC;}
 <INITIAL>"begin"			{ MP; return vBEGIN;}
 <INITIAL>"case"				{ MP; return vCASE;}
 <INITIAL>"default"			{ MP; return vDEFAULT;}
@@ -119,7 +120,6 @@ vPUNCT 	[\?\:\|\^\&\<\>\-\*\/\%\(\)\{\}\[\]\~\!\;\#\,\.\@\=\+]
 
 
 	/*	unsupported Keywords	*/
-<INITIAL>"automatic"		{ UNSUPPORTED_TOKEN; return vNOT_SUPPORT;}
 <INITIAL>"buf"				{ UNSUPPORTED_TOKEN; return vNOT_SUPPORT;}
 <INITIAL>"casex"			{ UNSUPPORTED_TOKEN; return vNOT_SUPPORT;}
 <INITIAL>"casez"			{ UNSUPPORTED_TOKEN; return vNOT_SUPPORT;}

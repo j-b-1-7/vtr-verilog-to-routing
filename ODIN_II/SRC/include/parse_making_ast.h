@@ -53,6 +53,7 @@ ast_node_t *newCase(ast_node_t *compare_expression, ast_node_t *case_list, int l
 ast_node_t *newAlways(ast_node_t *delay_control, ast_node_t *statements, int line_number);
 ast_node_t *newFor(ast_node_t *initial, ast_node_t *compare_expression, ast_node_t *terminal, ast_node_t *statement, int line_number);
 ast_node_t *newWhile(ast_node_t *compare_expression, ast_node_t *statement, int line_number);
+ast_node_t *newStatement(ast_node_t *statement, int line_number);
 
 /* MODULE INSTANCES FUNCTIONS */
 ast_node_t *newModuleConnection(char* id, ast_node_t *expression, int line_number);
@@ -81,8 +82,8 @@ ast_node_t *newIntegerTypeVarDeclare(char* symbol, ast_node_t *expression1, ast_
 
 /* HIGH LEVEL ITEMS */
 ast_node_t *newModule(char* module_name, ast_node_t *list_of_parameters, ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number);
-ast_node_t *newFunction(ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number);
-ast_node_t *newTask(char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number);
+ast_node_t *newFunction(bool automatic, ast_node_t *output_node, ast_node_t *list_of_ports, ast_node_t *list_of_module_items, int line_number);
+ast_node_t *newTask(bool automatic, char *task_name, ast_node_t *list_of_ports, ast_node_t *list_of_task_items, int line_number);
 void next_module();
 void next_function();
 void next_task();
